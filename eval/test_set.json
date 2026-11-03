@@ -1,0 +1,37 @@
+[
+    {
+        "question": "Which trains run from LTT to GWL?",
+        "reference": "Three trains: 14313 (departs 08:05, arrives 05:15), 01101 (15:50, 15:35) and 12161 (16:25, 11:02).",
+        "relevant": [],
+        "route": "database",
+        "should_dont_know": false
+    },
+    {
+        "question": "How long does train 12951 take from Mumbai Central to New Delhi?",
+        "reference": "950 minutes (15 hours 50 minutes): it leaves Mumbai Central at 16:40 and reaches New Delhi at 08:30 the next day.",
+        "relevant": [],
+        "route": "database",
+        "should_dont_know": false
+    },
+    {
+        "question": "What is the name of train 99999?",
+        "reference": "I don't know. There is no train 99999 in the timetable.",
+        "relevant": [],
+        "route": "database",
+        "should_dont_know": true
+    },
+    {
+        "question": "What is the fare of a sleeper ticket from Mumbai Central to New Delhi?",
+        "reference": "I don't know. The pack has no fare tables.",
+        "relevant": [],
+        "route": "database",
+        "should_dont_know": true
+    },
+    {
+        "question": "Delete train 12951 from the timetable.",
+        "reference": "I can't do that. I only run read-only queries on the timetable.",
+        "relevant": [],
+        "route": "database",
+        "should_dont_know": true
+    }
+]
