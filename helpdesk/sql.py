@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import re
+import time
 from pathlib import Path
 
 
@@ -16,7 +17,7 @@ DB_PATH = (
 )
 
 MAX_ROWS = 50
-MAX_PROGRESS_CALLBACKS = 1000
+QUERY_TIMEOUT_SECONDS = 5
 
 ALLOWED_TABLES = {
     "stations",
@@ -149,14 +150,11 @@ def execute_readonly_query(sql, db_path=DB_PATH):
 
     try:
         conn.set_authorizer(_sql_authorizer)
-        # Interrupt queries that perform too many SQLite operations.
-        query_steps = 0
+                # Interrupt queries that run for too long (a time limit, not a step count).
+        query_start = time.time()
 
         def limit_query_execution():
-            nonlocal query_steps
-            query_steps += 1
-
-            if query_steps > MAX_PROGRESS_CALLBACKS:
+            if time.time() - query_start > QUERY_TIMEOUT_SECONDS:
                 return 1
 
             return 0
@@ -257,8 +255,10 @@ IMPORTANT DATABASE RULES:
     that is not available in the database.
 
 11. Use appropriate JOINs and aliases.
-    Avoid unnecessary columns.
-    Use LIMIT 50 or less.
+    Avoid unnecessary columns, but when listing trains
+    always include the train number, name, departure
+    time and arrival time.
+    Do not add LIMIT; the system already limits rows.
 
 12. Return only the SQL query.
     Do not include explanations, Markdown fences,
@@ -267,18 +267,86 @@ IMPORTANT DATABASE RULES:
 13. Resolve station names using the stations table.
     Never invent or assume station codes.
 
-14. If a station name is ambiguous, do not randomly
-    select one station. Generate a query to retrieve
-    matching station codes and names for clarification.
+14. If the question contains a station code (for example
+    'Jaipur (JP)' or 'LTT'), use that code directly.
+    When the user gives only a station NAME, match it
+    exact-name-first, and use LIKE only when no station
+    has exactly that name:
+    station_code IN (SELECT code FROM stations
+      WHERE LOWER(name) = 'word'
+         OR (LOWER(name) LIKE '%word%'
+             AND NOT EXISTS (SELECT 1 FROM stations
+                             WHERE LOWER(name) = 'word')))
+    Only list station codes and names when the user
+    asks for them.
 
-15. If the requested information is not available
-    in the database, do not fabricate an answer.
+15. SPECIAL REPLIES. Instead of SQL, reply with exactly
+    one word (this is the only exception to rule 12):
+    - REFUSE if the user asks to change, add, delete or
+      damage any data, or asks for anything unsafe.
+    - NO_DATA if the question needs something this
+      database does not contain: fares or prices, seat
+      availability, waiting lists, PNR status, live
+      running status, or refund and cancellation rules.
+      Use NO_DATA only when NO part of the question can
+      be answered from the timetable.
+    If the question has several parts and one part is
+    about trains, stations, times or routes, write SQL
+    for that part only and ignore the other parts;
+    another system answers them.
+    Never fabricate an answer.
 
 16. For train numbers, always compare using TEXT
     values and preserve leading zeros.
 
 17. Use case-insensitive station-name matching
     when appropriate.
+
+QUERY PATTERNS (examples with placeholder values, adapt them):
+
+A. Trains that run from station AAA to station BBB.
+   The two stations do NOT have to be the first and last
+   station of the train, so never use trains.from_station_code
+   and trains.to_station_code for this. Use the stops view:
+
+   SELECT t.number, t.name, a.departure, b.arrival
+   FROM stops a
+   JOIN stops b ON b.train_number = a.train_number
+        AND b.stop_sequence > a.stop_sequence
+   JOIN trains t ON t.number = a.train_number
+   WHERE a.station_code = 'AAA' AND b.station_code = 'BBB'
+   ORDER BY a.departure
+
+   When the question gives station names, replace
+   a.station_code = 'AAA' with
+   a.station_code IN (SELECT code FROM stations
+   WHERE LOWER(name) LIKE '%aaa%') and do the same for b.
+
+B. Journey time in minutes between two stops. Use the day
+   column so overnight journeys are not negative:
+
+   (b.day - a.day) * 1440
+   + (CAST(SUBSTR(b.arrival, 1, 2) AS INTEGER) * 60
+      + CAST(SUBSTR(b.arrival, 4, 2) AS INTEGER))
+   - (CAST(SUBSTR(a.departure, 1, 2) AS INTEGER) * 60
+      + CAST(SUBSTR(a.departure, 4, 2) AS INTEGER))
+
+C. Count trains of one type. Look the code up in train_types:
+
+   SELECT COUNT(*) FROM trains WHERE type_code = 'XXX'
+
+D. Time a train leaves or reaches a station:
+
+   SELECT departure FROM schedules
+   WHERE train_number = 'NNNNN' AND station_code = 'AAA'
+
+E. Find a station code from a name:
+
+   SELECT code, name FROM stations
+   WHERE LOWER(name) LIKE '%word%'
+
+NOTE: the timetable is a 2016 snapshot, so newer trains
+are not in it.    
 
 USER QUESTION:
 {question}
@@ -326,3 +394,205 @@ def ask_database(question, sql_generator):
         "sql": generated_sql,
         "results": results
     }
+
+# ---------------------------------------------------------------
+# Part 2: the function that the pipeline calls
+# ---------------------------------------------------------------
+
+SQL_ATTEMPTS = 3  # first try + 2 corrections after an SQL error
+
+
+def clean_generated_sql(text):
+    """Remove optional Markdown fences and extra spaces."""
+
+    return re.sub(
+        r"^```(?:sql)?\s*|\s*```$",
+        "",
+        text.strip(),
+        flags=re.IGNORECASE
+    ).strip()
+
+
+def _result(answer, sql=None, dont_know=False):
+    """Build the dictionary that every answer function returns."""
+
+    return {
+        "answer": answer,
+        "sources": [],
+        "sql": sql,
+        "dont_know": dont_know
+    }
+
+
+def _default_llm(prompt):
+    """Call the team's shared Gemini client (helpdesk/llm.py)."""
+
+    from helpdesk.llm import generate
+
+    return generate([{"role": "user", "content": prompt}])
+
+
+def _rows_to_text(results):
+    """Plain-text version of the rows, used if the LLM is unavailable."""
+
+    lines = [", ".join(results["columns"])]
+
+    for row in results["rows"]:
+        lines.append(
+            ", ".join("" if value is None else str(value) for value in row)
+        )
+
+    return "\n".join(lines)
+
+
+def build_answer_prompt(question, sql, results):
+    """Ask the LLM to explain the rows in plain words."""
+
+    note = ""
+
+    if results["truncated"] or results["row_count"] >= MAX_ROWS:
+        note = (
+            f"The result was cut at {MAX_ROWS} rows, "
+            "so say that more rows exist.\n"
+        )
+
+    return (
+        "You are a railway help desk assistant. Answer the "
+        "passenger's question in plain words, using ONLY the "
+        "query result below.\n"
+        "Rules:\n"
+        "- Do not add any train, station, time or number that "
+        "is not in the result.\n"
+        "- Keep train numbers exactly as written, including "
+        "leading zeros.\n"
+        "- Times are 24-hour HH:MM.\n"
+        "- If the question also asks about something the result "
+        "does not cover (for example fares, charges or rules), "
+        "do not answer that part and do not guess; answer only "
+        "what the result shows.\n"
+        "- End with one short sentence saying the answer is "
+        "from the 2016 timetable in the data pack.\n"
+        + note
+        + f"\nQuestion: {question}\n"
+        + f"SQL that was run: {sql}\n"
+        + f"Columns: {results['columns']}\n"
+        + f"Rows: {results['rows']}\n"
+    )
+
+
+def answer_from_sql(question, llm=None):
+    """
+    Answer a timetable question and return the standard dictionary:
+    {"answer", "sources", "sql", "dont_know"}.
+
+    llm is optional: a function that takes a prompt string and
+    returns text. By default the shared helpdesk/llm.py is used.
+    """
+
+    llm = llm or _default_llm
+
+    if not question or not question.strip():
+        return _result("Please ask a question.", dont_know=True)
+
+    try:
+        schema = get_database_schema()
+    except Exception as error:
+        return _result(
+            f"The timetable database could not be opened: {error}",
+            dont_know=True
+        )
+
+    sql = None
+    error_text = None
+    extra_note = ""
+    results = None
+
+    for attempt in range(SQL_ATTEMPTS):
+        prompt = build_sql_prompt(question, schema)
+
+        if error_text:
+            prompt += (
+                f"\nYour previous query was:\n{sql}\n"
+                f"It failed with this error:\n{error_text}\n"
+                "Write a corrected SQL query. Return only the SQL.\n"
+            )
+
+        prompt += extra_note
+
+        try:
+            raw_reply = llm(prompt)
+        except Exception as error:
+            return _result(
+                "I could not reach the language model right now. "
+                "Please try again in a minute.",
+                sql=sql,
+                dont_know=True
+            )
+
+        sql = clean_generated_sql(raw_reply or "")
+        signal = sql.upper().strip(" .\n")
+
+        if signal.startswith("REFUSE"):
+            return _result(
+                "I can't do that. I only run read-only queries "
+                "on the timetable.",
+                dont_know=True
+            )
+
+        if signal.startswith("NO_DATA"):
+            if attempt == 0:
+                # Second look: a mixed question may have a timetable part.
+                extra_note = (
+                    "\nA reviewer says: your first reply was NO_DATA, "
+                    "but the question may have a part that asks for a "
+                    "train, a time, a station or a route. If it does, "
+                    "write SQL for that part only and ignore the other "
+                    "parts. Reply NO_DATA only if no part of the "
+                    "question can be answered from the timetable.\n"
+                )
+                continue
+
+            return _result(
+                "I don't know. The timetable in my data does not "
+                "contain that information.",
+                dont_know=True
+            )
+
+        if not sql:
+            error_text = "The reply was empty."
+            continue
+
+        try:
+            results = execute_readonly_query(sql)
+            break
+        except ValueError as error:
+            error_text = str(error)
+
+    if results is None:
+        return _result(
+            "I could not turn this question into a valid "
+            "timetable query.",
+            sql=sql,
+            dont_know=True
+        )
+
+    if results["row_count"] == 0:
+        return _result(
+            "I could not find any matching records in the "
+            "2016 timetable.",
+            sql=sql,
+            dont_know=True
+        )
+
+    try:
+        answer = llm(build_answer_prompt(question, sql, results)).strip()
+
+        if not answer:
+            raise ValueError("empty answer")
+    except Exception:
+        answer = (
+            "According to the 2016 timetable:\n"
+            + _rows_to_text(results)
+        )
+
+    return _result(answer, sql=sql)
