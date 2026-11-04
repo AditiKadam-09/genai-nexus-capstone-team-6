@@ -1,0 +1,23 @@
+# Indian Railways Help Desk - Dependencies
+# Python >= 3.10 recommended
+
+# Document extraction & OCR (Assigned: Document Ingestion & Index Building)
+docling>=2.14.0
+rapidocr-onnxruntime>=1.2.0
+pymupdf>=1.24.0
+beautifulsoup4>=4.12.0
+
+# Vector embeddings & ChromaDB indexing
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+torch>=2.2.0
+
+# Optional LLM / Gemini Integration
+google-genai>=1.0.0
+
+# Configuration & Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+
+# Testing
+pytest>=8.0.0
