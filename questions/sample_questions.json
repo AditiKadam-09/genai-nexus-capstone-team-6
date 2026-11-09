@@ -1,0 +1,113 @@
+[
+  {
+    "id": "S01",
+    "question": "What is the gazette notification number for the Vande Bharat Sleeper refund rules?",
+    "answer": "G.S.R. 41(E), dated 16 January 2026. It amended the Railway Passengers (Cancellation of Ticket and Refund of Fare) Rules, 2015, and Railway Board sent it out with Commercial Circular No. 08 of 2026.",
+    "sources": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 1
+      }
+    ],
+    "sql": null
+  },
+  {
+    "id": "S02",
+    "question": "What is the name of train 12430?",
+    "answer": "Train 12430 is the Delhi H Nizamuddin-Bangalore Rajdhani Express.",
+    "sources": [],
+    "sql": "SELECT number, name FROM trains WHERE number = '12430';"
+  },
+  {
+    "id": "S03",
+    "question": "Does the 60-day booking limit apply to the Taj Express?",
+    "answer": "No. Day-time express trains like the Taj Express and Gomti Express keep their existing lower advance reservation limits.",
+    "sources": [
+      {
+        "doc": "rb_cc10_2024_advance_reservation.pdf",
+        "page": 1
+      }
+    ],
+    "sql": null
+  },
+  {
+    "id": "S04",
+    "question": "Which trains go from Jaipur (JP) to Udaipur City (UDZ)?",
+    "answer": "2 trains: 12315 Ananya Express (leaves Jaipur 17:20, reaches Udaipur City 03:00); 12965 Gwalior Udaipur Express (leaves Jaipur 22:30, reaches Udaipur City 06:10).",
+    "sources": [],
+    "sql": "SELECT t.number, t.name, a.departure, b.arrival FROM stops a JOIN stops b ON b.train_number = a.train_number AND b.stop_sequence > a.stop_sequence JOIN trains t ON t.number = a.train_number WHERE a.station_code = 'JP' AND b.station_code = 'UDZ' ORDER BY a.departure;"
+  },
+  {
+    "id": "S05",
+    "question": "How much is a 3AC ticket on the Mumbai Rajdhani from Mumbai to Delhi?",
+    "answer": "I don't know. The pack has no fare tables.",
+    "sources": [],
+    "sql": null
+  },
+  {
+    "id": "S06",
+    "question": "How much is deducted when I cancel a waitlisted sleeper class ticket?",
+    "answer": "Only the clerkage charge: Rs 60 per passenger (it was Rs 30 before the 2015 revision), if you cancel at least 30 minutes before departure.",
+    "sources": [
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": null
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 3
+      }
+    ],
+    "sql": null
+  },
+  {
+    "id": "S07",
+    "question": "When does the Bhopal Shatabdi (12002) leave New Delhi, and what is the cancellation charge if I cancel my confirmed AC chair car ticket 5 days before?",
+    "answer": "It leaves New Delhi at 06:15. Cancelling a confirmed AC Chair Car ticket 5 days ahead costs the flat charge of Rs 180 per passenger plus GST.",
+    "sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      },
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": null
+      }
+    ],
+    "sql": "SELECT departure FROM schedules WHERE train_number = '12002' AND station_code = 'NDLS';"
+  },
+  {
+    "id": "S08",
+    "question": "If I cancel my confirmed Vande Bharat Sleeper ticket 10 hours before departure, how much do I lose?",
+    "answer": "50% of the fare. Between 72 hours and 8 hours before departure the cancellation charge on Vande Bharat Sleeper Express is 50%; after that there is no refund.",
+    "sources": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "sql": null
+  },
+  {
+    "id": "S09",
+    "question": "How many Rajdhani trains are in the timetable?",
+    "answer": "There are 48 Rajdhani Express trains (type code Raj) in the timetable.",
+    "sources": [],
+    "sql": "SELECT COUNT(*) FROM trains WHERE type_code = 'Raj';"
+  },
+  {
+    "id": "S10",
+    "question": "Change the departure time of train 12002 to 07:00 in your database.",
+    "answer": "I can't do that. I only run read-only queries on the timetable.",
+    "sources": [],
+    "sql": null
+  }
+]

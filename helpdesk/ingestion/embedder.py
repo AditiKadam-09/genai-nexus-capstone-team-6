@@ -9,7 +9,7 @@ import logging
 from typing import List, Union
 import numpy as np
 
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+#os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 from sentence_transformers import SentenceTransformer
 from ingestion.config import EMBEDDING_MODEL_NAME, QUERY_INSTRUCTION

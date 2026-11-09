@@ -1,67 +1,141 @@
-"""Gemini client wrapper using google-genai SDK."""
+"""Shared Gemini client for the Railway Passenger Help Desk.
+
+The public generate(messages) function is intentionally compatible with
+helpdesk.sql, which imports it to generate Text-to-SQL queries.
+"""
+
+from __future__ import annotations
 
 import os
+import time
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Iterable, List, Dict, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash-lite")
+# Prefer active GEMINI model; default to gemini-3.5-flash-lite
+DEFAULT_MODEL = os.getenv("LLM_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+_MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
 _client = None
 
 
-def get_genai_client():
-    """Lazy initialize google-genai client."""
+class LLMError(RuntimeError):
+    """Raised when the Gemini request cannot be completed."""
+
+
+def _get_client():
     global _client
     if _client is not None:
         return _client
-    api_key = os.getenv("GEMINI_API_KEY")
+
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        logger.warning("GEMINI_API_KEY is not set in environment or .env file.")
-        return None
+        raise LLMError(
+            "Gemini API key is missing. Set GEMINI_API_KEY in your environment "
+            "or in the project-root .env file."
+        )
+
     try:
         from google import genai
-        _client = genai.Client(api_key=api_key)
-        return _client
-    except Exception as exc:
-        logger.error("Failed to initialize genai.Client: %s", exc)
-        return None
+    except ImportError as exc:
+        raise LLMError(
+            "The Gemini SDK is not installed. Run: pip install -r requirements.txt"
+        ) from exc
+
+    _client = genai.Client(api_key=api_key)
+    return _client
+
+
+def _convert_messages(messages: Iterable[dict[str, Any]]):
+    """Convert OpenAI-style role/content messages into Gemini contents."""
+    system_parts: list[str] = []
+    contents: list[dict[str, Any]] = []
+
+    for message in messages:
+        role = str(message.get("role", "user")).lower()
+        content = message.get("content", "")
+        if isinstance(content, list):
+            content = "\n".join(
+                str(part.get("text", "")) if isinstance(part, dict) else str(part)
+                for part in content
+            )
+        content = str(content)
+
+        if role == "system":
+            system_parts.append(content)
+        elif role == "assistant":
+            contents.append({"role": "model", "parts": [{"text": content}]})
+        else:
+            contents.append({"role": "user", "parts": [{"text": content}]})
+
+    system_instruction = "\n\n".join(system_parts) or None
+    return system_instruction, contents
 
 
 def generate(
-    messages: List[Dict[str, str]],
-    model: str = DEFAULT_MODEL,
+    messages: str | list[dict[str, Any]],
+    *,
+    model: str | None = None,
     temperature: float = 0.0,
-    max_tokens: int = 1024,
+    max_output_tokens: int = 2048,
+    max_tokens: int | None = None,
 ) -> str:
-    """Generate text completion from Gemini."""
-    client = get_genai_client()
-    if client is None:
-        return "I could not reach the language model right now. Please try again in a minute."
+    """Generate text with Gemini.
 
-    # Construct prompt from messages
-    prompt_parts = []
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if role == "system":
-            prompt_parts.append(f"System Instructions:\n{content}\n")
-        elif role == "user":
-            prompt_parts.append(f"User: {content}\n")
-        elif role == "assistant":
-            prompt_parts.append(f"Assistant: {content}\n")
+    `messages` accepts either a plain prompt string or a list of
+    {role, content} dictionaries. Returns response text.
+    """
+    if max_tokens is not None:
+        max_output_tokens = max_tokens
 
-    full_prompt = "\n".join(prompt_parts) if len(prompt_parts) > 1 else messages[-1].get("content", "")
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+    if not messages:
+        raise ValueError("messages cannot be empty")
+
+    system_instruction, contents = _convert_messages(messages)
+    if not contents:
+        contents = [{"role": "user", "parts": [{"text": "Respond to the request."}]}]
+
+    client = _get_client()
+    selected_model = model or DEFAULT_MODEL
 
     try:
-        response = client.models.generate_content(
-            model=model,
-            contents=full_prompt,
+        from google.genai import types
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            system_instruction=system_instruction,
         )
-        return response.text.strip() if response and response.text else ""
-    except Exception as exc:
-        logger.error("Gemini generation call failed: %s", exc)
-        return "I could not reach the language model right now. Please try again in a minute."
+    except ImportError as exc:
+        raise LLMError("Unable to import Gemini SDK configuration types.") from exc
+
+    last_error = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.models.generate_content(
+                model=selected_model,
+                contents=contents,
+                config=config,
+            )
+            text = getattr(response, "text", None)
+            if not text or not str(text).strip():
+                raise LLMError("Gemini returned an empty response.")
+            return str(text).strip()
+        except LLMError:
+            raise
+        except Exception as exc:
+            last_error = exc
+            if attempt < _MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 4))
+
+    raise LLMError(f"Gemini request failed after {_MAX_RETRIES + 1} attempts: {last_error}") from last_error
+
+
+def reset_client():
+    """Reset the cached client; useful for tests."""
+    global _client
+    _client = None
