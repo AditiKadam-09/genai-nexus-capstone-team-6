@@ -48,45 +48,45 @@ The help desk pipeline dynamically analyzes passenger queries, identifies domain
 
 ```mermaid
 flowchart TD
-    User([Passenger Query]) --> Router{Intent Classifier<br/><code>classify_intent()</code>}
+    User(["Passenger Query"]) --> Router{"Intent Classifier: classify_intent()"}
     
     %% Intent Branching
-    Router -->|Policy / Rules| DocPath[Document Query]
-    Router -->|Timetable / Schedule| SQLPath[Database Query]
-    Router -->|Policy + Schedule| BothPath[Hybrid Multi-Hop]
-    Router -->|Out of Domain| Abstain[Direct Abstention]
+    Router -->|Policy or Rules| DocPath["Document Query"]
+    Router -->|Timetable or Schedule| SQLPath["Database Query"]
+    Router -->|Policy + Schedule| BothPath["Hybrid Multi-Hop"]
+    Router -->|Out of Domain| Abstain["Direct Abstention"]
     
     %% Document Path (Hybrid Retrieval)
     subgraph DocRetrieval["Hybrid Retrieval Engine (helpdesk/search.py)"]
-        DocPath --> Preprocess[Railway Tokenizer & Synonym Expander]
-        Preprocess --> Dense[ChromaDB Dense Search<br/><code>bge-small-en-v1.5</code>]
-        Preprocess --> Lexical[BM25Okapi Keyword Search<br/>Domain Code Preservation]
-        Preprocess --> ExactCode[Statutory Rule & Train Regex<br/><code>Rule \d+</code>, <code>\b[0-2]\d{4}\b</code>]
+        DocPath --> Preprocess["Railway Tokenizer & Synonym Expander"]
+        Preprocess --> Dense["ChromaDB Dense Search: bge-small-en-v1.5"]
+        Preprocess --> Lexical["BM25Okapi Keyword Search (Code Preserved)"]
+        Preprocess --> ExactCode["Statutory Rule & Train Regex Extractor"]
         
-        Dense & Lexical --> RRF[Reciprocal Rank Fusion<br/><code>k = 60</code>]
-        ExactCode -->|Bonus δ = 0.05| RRF
-        RRF --> Reranker[CrossEncoder Reranker<br/><code>ms-marco-MiniLM-L-6-v2</code>]
+        Dense & Lexical --> RRF["Reciprocal Rank Fusion: k = 60"]
+        ExactCode -->|Exact Bonus: 0.05| RRF
+        RRF --> Reranker["CrossEncoder Reranker: ms-marco-MiniLM"]
     end
     
     %% SQL Path
     subgraph SQLPipeline["Text-to-SQL Engine (helpdesk/sql.py)"]
-        SQLPath --> SchemaPrompt[Schema-Grounded Prompting]
-        SchemaPrompt --> GeminiSQL[Gemini SQL Generator]
-        GeminiSQL --> Validator{Safety Validation<br/>Read-Only Mode & AST Check}
-        Validator -->|Safe SELECT| ExecDB[(SQLite: rail_timetable.db<br/><code>?mode=ro</code>)]
-        Validator -->|Forbidden DDL/DML| SQLReject[Block Execution]
-        ExecDB --> SQLSummary[SQL Result Synthesis]
+        SQLPath --> SchemaPrompt["Schema-Grounded Prompting"]
+        SchemaPrompt --> GeminiSQL["Gemini SQL Generator"]
+        GeminiSQL --> Validator{"Safety Validation: Read-Only & AST Check"}
+        Validator -->|Safe SELECT| ExecDB[("SQLite Database: rail_timetable.db")]
+        Validator -->|Forbidden DDL/DML| SQLReject["Block Execution"]
+        ExecDB --> SQLSummary["SQL Result Synthesis"]
     end
     
     %% Synthesis
-    Reranker --> LLMAnswer[Gemini Answer Synthesizer<br/><code>answer_from_chunks()</code>]
+    Reranker --> LLMAnswer["Gemini Answer Synthesizer: answer_from_chunks()"]
     SQLSummary --> LLMAnswer
     BothPath --> DocRetrieval & SQLPipeline
     
     %% Output
-    LLMAnswer --> JSONContract["Strict Output JSON Contract<br/><code>{ answer, sources, sql, dont_know }</code>"]
-    Abstain -->|<code>dont_know: true</code>| JSONContract
-    JSONContract --> Output([Terminal / CLI / Downstream API])
+    LLMAnswer --> JSONContract["Strict Output JSON Contract"]
+    Abstain -->|dont_know: true| JSONContract
+    JSONContract --> Output(["CLI Terminal / JSON Output"])
 ```
 
 ---
@@ -362,10 +362,3 @@ pytest tests/test_answer.py -v
   <i>Engineered with rigorous testing, grounded citations, and safety-first multi-agent orchestration.</i>
 </div>
 
-
----
-
-### Running Ingestion Tests
-```bash
-python -m pytest tests/test_cleaner.py tests/test_chunker.py tests/test_extraction.py tests/test_indexer.py tests/test_ingest.py -v
-```
