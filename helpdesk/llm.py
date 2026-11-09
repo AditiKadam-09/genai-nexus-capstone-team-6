@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Iterable
-
+import logging
+from typing import Any, Iterable, List, Dict, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+logger = logging.getLogger(__name__)
+
+# Prefer active GEMINI model; default to gemini-3.5-flash-lite
+DEFAULT_MODEL = os.getenv("LLM_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 _MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
 _client = None
 
@@ -55,7 +58,6 @@ def _convert_messages(messages: Iterable[dict[str, Any]]):
         role = str(message.get("role", "user")).lower()
         content = message.get("content", "")
         if isinstance(content, list):
-            # Accept simple text-part message payloads.
             content = "\n".join(
                 str(part.get("text", "")) if isinstance(part, dict) else str(part)
                 for part in content
@@ -79,14 +81,16 @@ def generate(
     model: str | None = None,
     temperature: float = 0.0,
     max_output_tokens: int = 2048,
+    max_tokens: int | None = None,
 ) -> str:
     """Generate text with Gemini.
 
     `messages` accepts either a plain prompt string or a list of
     {role, content} dictionaries. Returns response text.
-
-    This interface is shared by answer generation and Text-to-SQL.
     """
+    if max_tokens is not None:
+        max_output_tokens = max_tokens
+
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
     if not messages:
