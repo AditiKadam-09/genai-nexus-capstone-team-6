@@ -22,10 +22,43 @@ logger = logging.getLogger("helpdesk.search")
 
 DEFAULT_INDEX_DIR = Path("index")
 DEFAULT_CHROMA_DIR = DEFAULT_INDEX_DIR / "chroma_db"
-DEFAULT_COLLECTION_NAME = "railway_documents"
+DEFAULT_COLLECTION_NAME = "rail_helpdesk_docs"
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 DEFAULT_RRF_K = 60
+
+# Stop words to filter out noise from keyword queries
+RAILWAY_STOP_WORDS = {
+    "a", "an", "the", "is", "are", "was", "were", "in", "on", "at", "by",
+    "for", "with", "about", "against", "between", "into", "through", "during",
+    "before", "after", "above", "below", "to", "from", "up", "down",
+    "out", "off", "over", "under", "again", "further", "then", "once",
+    "here", "there", "when", "where", "why", "how", "all", "any", "both",
+    "each", "few", "more", "most", "other", "some", "such", "no", "nor",
+    "not", "only", "own", "same", "so", "than", "too", "very", "s", "t",
+    "can", "will", "just", "don", "should", "now", "i", "me", "my", "myself",
+    "we", "our", "you", "your", "he", "him", "his", "she", "her", "it", "its",
+    "they", "them", "their", "what", "which", "who", "whom", "this", "that",
+    "these", "those", "am", "been", "being", "have", "has", "had", "having",
+    "do", "does", "did", "doing", "much"
+}
+
+# Domain-specific railway query synonyms and expansions
+RAILWAY_SYNONYMS = {
+    "waitlisted": ["waitlist", "wait-listed", "waiting", "wl", "rac", "clerkage"],
+    "waitlist": ["waitlisted", "wait-listed", "waiting", "wl", "rac", "clerkage"],
+    "wl": ["waitlist", "waitlisted", "waiting", "rac", "clerkage", "rac/wl"],
+    "rac": ["waitlist", "waitlisted", "wl", "clerkage", "rac/wl"],
+    "clerkage": ["deduction", "deducted", "cancellation", "charge", "waitlist", "wl", "rac"],
+    "deducted": ["deduction", "clerkage", "charge"],
+    "deduction": ["deducted", "clerkage", "charge"],
+    "cancel": ["cancellation", "cancelling", "cancelled", "refund"],
+    "cancelling": ["cancellation", "cancel", "cancelled", "refund"],
+    "cancelled": ["cancellation", "cancel", "refund"],
+    "cancellation": ["cancel", "cancelled", "refund"],
+    "sleeper": ["second", "class", "sl", "reserved"],
+    "arp": ["advance", "reservation", "period"],
+}
 
 # Global singletons to avoid repeated reloads
 _embedding_model = None
@@ -89,6 +122,12 @@ def extract_exact_railway_codes(query: str) -> Dict[str, Set[str]]:
     for st in potential_stations:
         if st in known_stations:
             codes["stations"].add(st)
+
+    # 7. Railway policy & rule concepts (e.g. waitlist cancellation, clerkage)
+    if re.search(r"\b(waitlist|waitlisted|wait-listed|waiting list|wl|rac)\b", query, re.IGNORECASE):
+        if re.search(r"\b(clerkage|deduct|deduction|cancel|cancellation|charge|refund)\b", query, re.IGNORECASE):
+            codes["rules"].add("clerkage")
+            codes["rules"].add("waitlist")
 
     return codes
 
@@ -163,6 +202,20 @@ def load_chunks(index_dir: Path = DEFAULT_INDEX_DIR) -> List[Dict[str, Any]]:
         return json.load(f)
 
 
+def prepare_bm25_tokens(text: str, is_query: bool = False) -> List[str]:
+    """Tokenize and expand railway text for BM25 with synonym awareness."""
+    raw_tokens = tokenize_railway_text(text)
+    tokens: List[str] = []
+    for t in raw_tokens:
+        if t in RAILWAY_STOP_WORDS:
+            continue
+        tokens.append(t)
+        if is_query and t in RAILWAY_SYNONYMS:
+            for syn in RAILWAY_SYNONYMS[t]:
+                tokens.extend(tokenize_railway_text(syn))
+    return tokens
+
+
 def get_bm25_index(chunks: List[Dict[str, Any]]):
     """Build or retrieve the BM25 index for the supplied chunks."""
     global _bm25_index, _bm25_chunks
@@ -174,7 +227,16 @@ def get_bm25_index(chunks: List[Dict[str, Any]]):
 
     try:
         from rank_bm25 import BM25Okapi
-        corpus = [tokenize_railway_text(c.get("text", "") + " " + c.get("section_path", "")) for c in chunks]
+        corpus = [
+            prepare_bm25_tokens(
+                c.get("text", "")
+                + " "
+                + c.get("section_path", "")
+                + " "
+                + c.get("section_title", "")
+            )
+            for c in chunks
+        ]
         _bm25_index = BM25Okapi(corpus)
         _bm25_chunks = chunks
         return _bm25_index
@@ -245,10 +307,10 @@ def retrieve_dense(
             logger.debug("In-memory embedding similarity failed: %s", exc)
 
     # 3. Graceful fallback if embeddings unavailable: simple term overlap
-    q_tokens = set(tokenize_railway_text(query))
+    q_tokens = set(prepare_bm25_tokens(query, is_query=True))
     scored = []
     for c in chunks:
-        c_tokens = set(tokenize_railway_text(c.get("text", "")))
+        c_tokens = set(prepare_bm25_tokens(c.get("text", "")))
         overlap = len(q_tokens & c_tokens) / (len(q_tokens) or 1)
         scored.append((c, overlap))
     scored.sort(key=lambda x: x[1], reverse=True)
@@ -260,7 +322,7 @@ def retrieve_bm25(
     chunks: List[Dict[str, Any]],
     k: int = 10,
 ) -> List[Tuple[Dict[str, Any], float]]:
-    """Retrieve top-k candidates using BM25 keyword matching."""
+    """Retrieve top-k candidates using BM25 keyword matching with query expansion."""
     if not query.strip() or not chunks:
         return []
 
@@ -268,7 +330,7 @@ def retrieve_bm25(
     if bm25 is None:
         return []
 
-    q_tokens = tokenize_railway_text(query)
+    q_tokens = prepare_bm25_tokens(query, is_query=True)
     if not q_tokens:
         return []
 

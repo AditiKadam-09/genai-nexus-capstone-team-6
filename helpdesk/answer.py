@@ -34,8 +34,8 @@ def answer_from_chunks(
     seen = set()
     for c in chunks:
         meta = c.get("metadata", {})
-        doc = meta.get("doc")
-        page = meta.get("page")
+        doc = meta.get("doc") or c.get("doc")
+        page = meta.get("page") if "page" in meta else c.get("page")
         if doc:
             key = (doc, page)
             if key not in seen:
@@ -46,8 +46,8 @@ def answer_from_chunks(
     evidence_blocks = []
     for idx, c in enumerate(chunks, start=1):
         meta = c.get("metadata", {})
-        doc = meta.get("doc", "Unknown")
-        page = meta.get("page", "Unknown")
+        doc = meta.get("doc") or c.get("doc", "Unknown")
+        page = meta.get("page") if "page" in meta else c.get("page", "Unknown")
         text = c.get("text", "").strip()
         evidence_blocks.append(f"[Evidence {idx}] (Document: {doc}, Page: {page})\n{text}")
 
