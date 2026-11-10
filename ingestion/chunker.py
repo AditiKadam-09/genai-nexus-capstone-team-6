@@ -204,7 +204,15 @@ def chunk_section(section: Dict[str, Any], chunk_size: int = CHUNK_SIZE, chunk_o
             # Keep the lead-in sentence with the table, so the rule keeps its condition
             lead_in = last_paragraph if 0 < len(last_paragraph) <= 400 else ""
             for g in table_groups:
-                chunks.append(((lead_in + "\n\n" + g) if lead_in else g, "table_rows"))
+                group_text = (lead_in + "\n\n" + g) if lead_in else g
+                if len(group_text) > chunk_size * 2:
+                    # One huge table row cannot be split between rows (some web pages
+                    # wrap their whole text in a layout table): cut it like normal text.
+                    pieces = pack_with_overlap(recursive_split(group_text, chunk_size), chunk_size, chunk_overlap)
+                    for piece in pieces:
+                        chunks.append((piece, "table_rows"))
+                else:
+                    chunks.append((group_text, "table_rows"))
             last_paragraph = ""
         elif item_type == "paragraph":
             p_text = clean_text(item.get("text", ""))
