@@ -22,7 +22,7 @@ logger = logging.getLogger("helpdesk.search")
 
 DEFAULT_INDEX_DIR = Path("index")
 DEFAULT_CHROMA_DIR = DEFAULT_INDEX_DIR / "chroma_db"
-DEFAULT_COLLECTION_NAME = "railway_documents"
+DEFAULT_COLLECTION_NAME = "rail_helpdesk_docs"
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 DEFAULT_RRF_K = 60

@@ -37,10 +37,10 @@ Rules:
    - Exclude it from definitive conclusions.
    - Explain that the available passage is incomplete if relevant.
 
-7. If sources disagree, explicitly describe the disagreement and cite each
-   conflicting source. Do not silently choose one version. If metadata contains
-   dates or versions, mention them when relevant, but do not assume which
-   is authoritative unless the documents establish that.
+7. If sources disagree, the passage from the NEWER document (by the date in
+   its header) wins, because a newer circular overrides an older rule. Give
+   the newer rule as the answer, say that it overrides the older one, and
+   name both documents.
 
 8. If the passages do not provide enough evidence to answer the question,
    say:
@@ -53,11 +53,21 @@ Rules:
 10. Distinguish document-based information from uncertainty.
 
 11. Be concise, clear, and helpful to railway passengers.
+
+12. Apply a rule only when its conditions match the question: the train type
+    (a special rule for one named train type applies only to that train type),
+    the ticket class, and the time window. Do not use a rule written for a
+    different train type or class, and do not mix rules from different
+    conditions into one answer. If the question names a class or train type,
+    give the figure that applies to it.
 """
 
 
 
-def format_context(results: list[dict[str, Any]], max_chars: int = 10000) -> str:
+MAX_PASSAGE_CHARS = 4000  # one very long chunk must not crowd out the others
+
+
+def format_context(results: list[dict[str, Any]], max_chars: int = 20000) -> str:
     """Format retrieved chunks with stable source identifiers and metadata."""
     if max_chars <= 0:
         raise ValueError("max_chars must be greater than zero")
@@ -77,7 +87,7 @@ def format_context(results: list[dict[str, Any]], max_chars: int = 10000) -> str
             f"[Source {index}] chunk_id: {chunk_id} | document: {doc} "
             f"| page: {page} | section: {section} | date: {date}"
         )
-        passage = f"{header}\n{str(result.get('text') or '').strip()}"
+        passage = f"{header}\n{str(result.get('text') or '').strip()[:MAX_PASSAGE_CHARS]}"
         added_length = len(passage) + (2 if passages else 0)
 
         if used + added_length > max_chars:
@@ -122,7 +132,7 @@ def generate_answer(
     retrieved_chunks: list[dict[str, Any]] | None = None,
     *,
     top_k: int = 5,
-    max_context_chars: int = 10000,
+    max_context_chars: int = 20000,
     search_fn=None,
     llm_fn=None,
 ) -> dict[str, Any]:

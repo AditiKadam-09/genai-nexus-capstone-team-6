@@ -8,13 +8,15 @@ from pathlib import Path
 # Project and database paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-DB_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "rail_capstone_pack"
-    / "database"
-    / "rail_timetable.db"
-)
+def _find_db_path():
+    """Find the timetable database wherever the pack was unzipped."""
+    for found in sorted((PROJECT_ROOT / "data").rglob("rail_timetable.db")):
+        return found
+
+    return PROJECT_ROOT / "database" / "rail_timetable.db"
+
+
+DB_PATH = _find_db_path()
 
 MAX_ROWS = 50
 QUERY_TIMEOUT_SECONDS = 5
@@ -272,11 +274,16 @@ IMPORTANT DATABASE RULES:
     When the user gives only a station NAME, match it
     exact-name-first, and use LIKE only when no station
     has exactly that name:
-    station_code IN (SELECT code FROM stations
+        station_code IN (SELECT code FROM stations
       WHERE LOWER(name) = 'word'
          OR (LOWER(name) LIKE '%word%'
              AND NOT EXISTS (SELECT 1 FROM stations
                              WHERE LOWER(name) = 'word')))
+    Use this pattern for EVERY station name, in every part
+    of the query, including subqueries that look up a
+    stop_sequence. Never match a station name with a plain
+    = alone: station names often have extra words
+    (for example 'CITY JN').
     Only list station codes and names when the user
     asks for them.
 
@@ -344,6 +351,21 @@ E. Find a station code from a name:
 
    SELECT code, name FROM stations
    WHERE LOWER(name) LIKE '%word%'
+
+F. Stops between two stations on one train, and the longest
+   halt (halt_min is in minutes; the stops view only holds
+   real halts):
+
+   SELECT st.name, s.arrival, s.departure, s.halt_min
+   FROM stops a
+   JOIN stops s ON s.train_number = a.train_number
+        AND s.stop_sequence > a.stop_sequence
+   JOIN stops b ON b.train_number = a.train_number
+        AND b.stop_sequence > s.stop_sequence
+   JOIN stations st ON st.code = s.station_code
+   WHERE a.train_number = 'NNNNN'
+     AND a.station_code = 'AAA' AND b.station_code = 'BBB'
+   ORDER BY s.halt_min DESC
 
 NOTE: the timetable is a 2016 snapshot, so newer trains
 are not in it.    
@@ -505,6 +527,7 @@ def answer_from_sql(question, llm=None):
     sql = None
     error_text = None
     extra_note = ""
+    zero_rows_retried = False
     results = None
 
     for attempt in range(SQL_ATTEMPTS):
@@ -564,9 +587,23 @@ def answer_from_sql(question, llm=None):
 
         try:
             results = execute_readonly_query(sql)
-            break
         except ValueError as error:
             error_text = str(error)
+            continue
+
+        if results["row_count"] == 0 and not zero_rows_retried:
+            # An empty result is often a wrong station name or condition:
+            # give the model one more try before saying nothing was found.
+            zero_rows_retried = True
+            error_text = (
+                "The query ran but returned 0 rows. Check every station "
+                "name (use the exact-first LIKE pattern from rule 14) and "
+                "every condition, then write a corrected query. If the "
+                "data really does not exist, repeat the same query."
+            )
+            continue
+
+        break
 
     if results is None:
         return _result(

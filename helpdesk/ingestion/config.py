@@ -76,8 +76,8 @@ QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 EMBEDDING_DIM = 384
 
 # Chunking Settings
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1500"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 
 # LLM / Gemini Settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

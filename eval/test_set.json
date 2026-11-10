@@ -1,37 +1,518 @@
 [
-    {
-        "question": "Which trains run from LTT to GWL?",
-        "reference": "Three trains: 14313 (departs 08:05, arrives 05:15), 01101 (15:50, 15:35) and 12161 (16:25, 11:02).",
-        "relevant": [],
-        "route": "database",
-        "should_dont_know": false
-    },
-    {
-        "question": "How long does train 12951 take from Mumbai Central to New Delhi?",
-        "reference": "950 minutes (15 hours 50 minutes): it leaves Mumbai Central at 16:40 and reaches New Delhi at 08:30 the next day.",
-        "relevant": [],
-        "route": "database",
-        "should_dont_know": false
-    },
-    {
-        "question": "What is the name of train 99999?",
-        "reference": "I don't know. There is no train 99999 in the timetable.",
-        "relevant": [],
-        "route": "database",
-        "should_dont_know": true
-    },
-    {
-        "question": "What is the fare of a sleeper ticket from Mumbai Central to New Delhi?",
-        "reference": "I don't know. The pack has no fare tables.",
-        "relevant": [],
-        "route": "database",
-        "should_dont_know": true
-    },
-    {
-        "question": "Delete train 12951 from the timetable.",
-        "reference": "I can't do that. I only run read-only queries on the timetable.",
-        "relevant": [],
-        "route": "database",
-        "should_dont_know": true
-    }
+  {
+    "question": "Which trains run from LTT to GWL?",
+    "reference": "Three trains: 14313 (departs 08:05, arrives 05:15), 01101 (15:50, 15:35) and 12161 (16:25, 11:02).",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "14313",
+      "08:05",
+      "05:15",
+      "01101"
+    ]
+  },
+  {
+    "question": "How long does train 12951 take from Mumbai Central to New Delhi?",
+    "reference": "950 minutes (15 hours 50 minutes): it leaves Mumbai Central at 16:40 and reaches New Delhi at 08:30 the next day.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "950",
+      "15",
+      "50",
+      "16:40"
+    ]
+  },
+  {
+    "question": "What is the name of train 99999?",
+    "reference": "I don't know. There is no train 99999 in the timetable.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": true,
+    "relevant_sources": [],
+    "expected_dont_know": true,
+    "expected_answer_keywords": []
+  },
+  {
+    "question": "What is the fare of a sleeper ticket from Mumbai Central to New Delhi?",
+    "reference": "I don't know. The pack has no fare tables.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": true,
+    "relevant_sources": [],
+    "expected_dont_know": true,
+    "expected_answer_keywords": []
+  },
+  {
+    "question": "Delete train 12951 from the timetable.",
+    "reference": "I can't do that. I only run read-only queries on the timetable.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": true,
+    "relevant_sources": [],
+    "expected_dont_know": true,
+    "expected_answer_keywords": []
+  },
+  {
+    "question": "What is the gazette notification number for the Vande Bharat Sleeper refund rules?",
+    "reference": "G.S.R. 41(E), dated 16 January 2026. It amended the Railway Passengers (Cancellation of Ticket and Refund of Fare) Rules, 2015, and Railway Board sent it out with Commercial Circular No. 08 of 2026.",
+    "relevant": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "relevant_sources": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "41",
+      "16",
+      "2026",
+      "2015"
+    ]
+  },
+  {
+    "question": "What is the name of train 12430?",
+    "reference": "Train 12430 is the Delhi H Nizamuddin-Bangalore Rajdhani Express.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "12430"
+    ]
+  },
+  {
+    "question": "Does the 60-day booking limit apply to the Taj Express?",
+    "reference": "No. Day-time express trains like the Taj Express and Gomti Express keep their existing lower advance reservation limits.",
+    "relevant": [
+      {
+        "doc": "rb_cc10_2024_advance_reservation.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "relevant_sources": [
+      {
+        "doc": "rb_cc10_2024_advance_reservation.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "reservation",
+      "existing"
+    ]
+  },
+  {
+    "question": "Which trains go from Jaipur (JP) to Udaipur City (UDZ)?",
+    "reference": "2 trains: 12315 Ananya Express (leaves Jaipur 17:20, reaches Udaipur City 03:00); 12965 Gwalior Udaipur Express (leaves Jaipur 22:30, reaches Udaipur City 06:10).",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "2",
+      "12315",
+      "17:20",
+      "03:00"
+    ]
+  },
+  {
+    "question": "How much is a 3AC ticket on the Mumbai Rajdhani from Mumbai to Delhi?",
+    "reference": "I don't know. The pack has no fare tables.",
+    "relevant": [],
+    "route": "documents",
+    "should_dont_know": true,
+    "relevant_sources": [],
+    "expected_dont_know": true,
+    "expected_answer_keywords": []
+  },
+  {
+    "question": "How much is deducted when I cancel a waitlisted sleeper class ticket?",
+    "reference": "Only the clerkage charge: Rs 60 per passenger (it was Rs 30 before the 2015 revision), if you cancel at least 30 minutes before departure.",
+    "relevant": [
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": null
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 3
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "relevant_sources": [
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": 0
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 3
+      }
+    ],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "60",
+      "30",
+      "2015"
+    ]
+  },
+  {
+    "question": "When does the Bhopal Shatabdi (12002) leave New Delhi, and what is the cancellation charge if I cancel my confirmed AC chair car ticket 5 days before?",
+    "reference": "It leaves New Delhi at 06:15. Cancelling a confirmed AC Chair Car ticket 5 days ahead costs the flat charge of Rs 180 per passenger plus GST.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      },
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": null
+      }
+    ],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      },
+      {
+        "doc": "indianrail_refund_rules_2015.html",
+        "page": 0
+      }
+    ],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "06:15",
+      "5",
+      "180"
+    ]
+  },
+  {
+    "question": "If I cancel my confirmed Vande Bharat Sleeper ticket 10 hours before departure, how much do I lose?",
+    "reference": "50% of the fare. Between 72 hours and 8 hours before departure the cancellation charge on Vande Bharat Sleeper Express is 50%; after that there is no refund.",
+    "relevant": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "relevant_sources": [
+      {
+        "doc": "rb_cc08_2026_vande_bharat_sleeper_refund.pdf",
+        "page": 5
+      },
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "50",
+      "72",
+      "8"
+    ]
+  },
+  {
+    "question": "How many Rajdhani trains are in the timetable?",
+    "reference": "There are 48 Rajdhani Express trains (type code Raj) in the timetable.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "relevant_sources": [],
+    "expected_dont_know": false,
+    "expected_answer_keywords": [
+      "48"
+    ]
+  },
+  {
+    "question": "Change the departure time of train 12002 to 07:00 in your database.",
+    "reference": "I can't do that. I only run read-only queries on the timetable.",
+    "relevant": [],
+    "route": "documents",
+    "should_dont_know": true,
+    "relevant_sources": [],
+    "expected_dont_know": true,
+    "expected_answer_keywords": []
+  },
+  {
+    "question": "How much is the flat cancellation charge for a confirmed Sleeper Class ticket cancelled more than 48 hours before departure?",
+    "reference": "Rs 120 per passenger.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "120"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "What is the flat cancellation charge for a confirmed AC Chair Car ticket cancelled more than 48 hours before departure?",
+    "reference": "Rs 180 per passenger plus GST.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "180"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "How much is deducted for a confirmed AC ticket cancelled between 48 and 12 hours before departure?",
+    "reference": "25 percent of the fare, subject to the minimum flat cancellation charge, plus GST.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "25"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "Is any refund given on a confirmed ticket that is not cancelled up to four hours before departure?",
+    "reference": "No. No refund is admissible on a confirmed ticket that is not cancelled, or on which the TDR is not filed online, up to four hours before the scheduled departure.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "no"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "Up to how long before departure must an RAC e-ticket be cancelled to get a refund?",
+    "reference": "Up to thirty minutes before the scheduled departure of the train.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "30",
+      "thirty"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "What percentage of the fare is deducted when a confirmed Vande Bharat Sleeper ticket is cancelled more than 72 hours before departure?",
+    "reference": "25 percent of the fare.",
+    "relevant": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "25"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "irctc_refund_rules_jan2026.pdf",
+        "page": 2
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "From which date can Tatkal tickets be booked on the IRCTC website or app only by Aadhaar authenticated users?",
+    "reference": "From 1 July 2025 (Aadhaar based OTP authentication became compulsory from 15 July 2025).",
+    "relevant": [
+      {
+        "doc": "rb_cc08_2025_tatkal.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "july",
+      "01-07-2025"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "rb_cc08_2025_tatkal.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "During which hours are authorised ticketing agents not allowed to book opening day Tatkal tickets for AC classes?",
+    "reference": "From 10:00 to 10:30 hours.",
+    "relevant": [
+      {
+        "doc": "rb_cc08_2025_tatkal.pdf",
+        "page": 1
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "10"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "rb_cc08_2025_tatkal.pdf",
+        "page": 1
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "Up to how many minutes before departure can passengers change their boarding station, according to the March 2026 Reform Express press release?",
+    "reference": "Up to 30 minutes before departure.",
+    "relevant": [
+      {
+        "doc": "pib_2026-03-24_reform_express.html",
+        "page": null
+      }
+    ],
+    "route": "documents",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "30",
+      "thirty"
+    ],
+    "relevant_sources": [
+      {
+        "doc": "pib_2026-03-24_reform_express.html",
+        "page": 0
+      }
+    ],
+    "expected_dont_know": false
+  },
+  {
+    "question": "What is the name of train 12002?",
+    "reference": "New Delhi-Bhopal Shatabdi Express.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "shatabdi"
+    ],
+    "relevant_sources": [],
+    "expected_dont_know": false
+  },
+  {
+    "question": "What time does train 12002 reach Bhopal Junction?",
+    "reference": "14:05.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": false,
+    "expected_answer_keywords": [
+      "14:05"
+    ],
+    "relevant_sources": [],
+    "expected_dont_know": false
+  },
+  {
+    "question": "Will my waitlisted ticket get confirmed?",
+    "reference": "I don't know. Whether a waitlisted ticket will be confirmed cannot be known from the documents.",
+    "relevant": [],
+    "route": "documents",
+    "should_dont_know": true,
+    "expected_answer_keywords": [],
+    "relevant_sources": [],
+    "expected_dont_know": true
+  },
+  {
+    "question": "How many seats are available on train 12951 tomorrow?",
+    "reference": "I don't know. The pack has no seat availability data.",
+    "relevant": [],
+    "route": "database",
+    "should_dont_know": true,
+    "expected_answer_keywords": [],
+    "relevant_sources": [],
+    "expected_dont_know": true
+  }
 ]

@@ -38,9 +38,14 @@ result = answer_from_sql("q", llm=fake_llm(["SELECT x FROM y"] * 3))
 assert result["dont_know"] is True
 print("PASSED: gives up after 3 bad queries")
 
-result = answer_from_sql("q", llm=fake_llm(["SELECT number FROM trains WHERE number = '99999'"]))
+result = answer_from_sql("q", llm=fake_llm(["SELECT number FROM trains WHERE number = '99999'"] * 2))
 assert result["dont_know"] is True
 print("PASSED: zero rows")
+
+WRONG_NAME = JOIN.replace("'GWL'", "'NOSUCH'")
+result = answer_from_sql("q", llm=fake_llm([WRONG_NAME, JOIN, "Three trains."]))
+assert result["dont_know"] is False and result["sql"] == JOIN
+print("PASSED: an empty result gets one more try")
 
 result = answer_from_sql("q", llm=fake_llm([JOIN]))   # second call fails
 assert result["dont_know"] is False and "2016 timetable" in result["answer"]

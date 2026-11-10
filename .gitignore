@@ -1,7 +1,4 @@
-# Environments
-.env
-.env.local
-.venv/
+g   
 .venv*/
 venv/
 env/
@@ -13,13 +10,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Index Storage & Vector DB
-index/chroma_db/
-chroma_db/
-*.chroma
-
 # Test & Evaluation Outputs
-.pytest_cache/
+.pytest_cache/ 
 .coverage
 htmlcov/
 *.results.json
@@ -31,3 +23,7 @@ sample_results.json
 .idea/
 .DS_Store
 Thumbs.db
+
+database/
+documents/
+questions/
