@@ -2,22 +2,22 @@
 # Python >= 3.10 recommended
 
 # Document extraction & OCR (Assigned: Document Ingestion & Index Building)
-docling>=2.14.0
-rapidocr-onnxruntime>=1.2.0
-pymupdf>=1.24.0
-beautifulsoup4>=4.12.0
+docling==2.149.0
+rapidocr-onnxruntime==1.4.4
+pymupdf==1.28.2
+beautifulsoup4==4.15.0
 
 # Vector embeddings & ChromaDB indexing
-sentence-transformers>=3.0.0
-chromadb>=0.5.0
-torch>=2.2.0
+sentence-transformers==6.2.0
+chromadb==1.5.9
+torch==2.14.1
 
 # Optional LLM / Gemini Integration
-google-genai>=1.0.0
+google-genai==2.33.0
 
 # Configuration & Utilities
-python-dotenv>=1.0.0
-tqdm>=4.66.0
+python-dotenv==1.2.4
+tqdm==4.70.1
 
 # Testing
-pytest>=8.0.0
+pytest==9.2.0

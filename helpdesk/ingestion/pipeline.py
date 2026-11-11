@@ -136,6 +136,14 @@ class IngestionPipeline:
         embed_time = time.time() - embed_start
         logger.info(f"Embeddings generated in {embed_time:.2f}s. Shape: {embeddings.shape}")
 
+        # 4b. Save the chunks for keyword (BM25) and exact-code search
+        import json
+        chunks_path = Path(self.persist_dir).parent / "chunks.json"
+        chunks_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(chunks_path, "w", encoding="utf-8") as f:
+            json.dump(all_chunks, f, ensure_ascii=False, indent=2)
+        logger.info("Saved %d chunks to %s", len(all_chunks), chunks_path)
+
         # 5. ChromaDB Indexing
         index_start = time.time()
         indexed_count = self.indexer.index_chunks(all_chunks, embeddings)

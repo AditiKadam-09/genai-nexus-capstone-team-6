@@ -7,6 +7,7 @@ helpdesk.sql, which imports it to generate Text-to-SQL queries.
 from __future__ import annotations
 
 import os
+import sys
 import time
 import logging
 from typing import Any, Iterable, List, Dict, Optional
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Prefer active GEMINI model; default to gemini-3.5-flash-lite
 DEFAULT_MODEL = os.getenv("LLM_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
-_MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
+_MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "5"))
 _client = None
 
 
@@ -130,7 +131,17 @@ def generate(
         except Exception as exc:
             last_error = exc
             if attempt < _MAX_RETRIES:
-                time.sleep(min(2 ** attempt, 4))
+                message = str(exc)
+                if "429" in message or "RESOURCE_EXHAUSTED" in message:
+                    wait_seconds = 20 * (attempt + 1)  # 20s, 40s, 60s, 80s, 100s
+                    print(
+                        f"[Gemini rate limit reached - waiting {wait_seconds}s, then retrying]",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    time.sleep(wait_seconds)
+                else:
+                    time.sleep(min(2 ** attempt, 8))
 
     raise LLMError(f"Gemini request failed after {_MAX_RETRIES + 1} attempts: {last_error}") from last_error
 

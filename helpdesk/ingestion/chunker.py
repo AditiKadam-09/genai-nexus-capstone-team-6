@@ -55,10 +55,22 @@ def build_sections(items: List[Dict[str, Any]], doc_name: str = "") -> List[Dict
             }
             sections.append(current_section)
         else:
-            if current_section is None:
+            # Start a continuation section when the text moves to a new page,
+            # so every chunk gets the page its text is really on.
+            page_changed = (
+                current_section is not None
+                and page is not None
+                and current_section.get("page") is not None
+                and page != current_section["page"]
+            )
+            if current_section is None or page_changed:
+                if current_section is None:
+                    title, path = default_title, [default_title]
+                else:
+                    title, path = current_section["title"], current_section["path"]
                 current_section = {
-                    "title": default_title,
-                    "path": [default_title],
+                    "title": title,
+                    "path": path,
                     "page": page,
                     "items": [],
                 }
@@ -177,6 +189,7 @@ def chunk_section(section: Dict[str, Any], chunk_size: int = CHUNK_SIZE, chunk_o
 
     chunks: List[Tuple[str, str]] = []
     text_paras: List[str] = []
+    last_paragraph = ""  # the sentence just before a table (its condition)
 
     for item in items:
         item_type = item.get("type")
@@ -188,12 +201,24 @@ def chunk_section(section: Dict[str, Any], chunk_size: int = CHUNK_SIZE, chunk_o
             footnotes = item.get("footnotes", [])
             if footnotes and table_groups:
                 table_groups[-1] += "\n" + "\n".join(footnotes)
+            # Keep the lead-in sentence with the table, so the rule keeps its condition
+            lead_in = last_paragraph if 0 < len(last_paragraph) <= 400 else ""
             for g in table_groups:
-                chunks.append((g, "table_rows"))
+                group_text = (lead_in + "\n\n" + g) if lead_in else g
+                if len(group_text) > chunk_size * 2:
+                    # One huge table row cannot be split between rows (some web pages
+                    # wrap their whole text in a layout table): cut it like normal text.
+                    pieces = pack_with_overlap(recursive_split(group_text, chunk_size), chunk_size, chunk_overlap)
+                    for piece in pieces:
+                        chunks.append((piece, "table_rows"))
+                else:
+                    chunks.append((group_text, "table_rows"))
+            last_paragraph = ""
         elif item_type == "paragraph":
             p_text = clean_text(item.get("text", ""))
             if p_text:
                 text_paras.append(p_text)
+                last_paragraph = p_text
 
     if text_paras:
         joined_text = "\n\n".join(text_paras)
@@ -251,6 +276,7 @@ class DocumentChunker:
                     "chunk_id": chunk_id,
                     "doc": doc_name,
                     "page": page_val,
+                    "date": doc_meta.get("date"),
                     "text": chunk_text,
                     "embedding_text": embedding_text,
                     "section_title": section.get("title", ""),
@@ -260,6 +286,7 @@ class DocumentChunker:
                         "doc": doc_name,
                         "page": page_val if page_val is not None else -1,  # ChromaDB metadata int fallback
                         "is_html": is_html,
+                        "date": doc_meta.get("date"),
                         "section_title": section.get("title", ""),
                         "section_path": section_path_str,
                         "split_method": split_method,

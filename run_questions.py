@@ -1,82 +1,75 @@
-#!/usr/bin/env python3
-"""run_questions.py: Batch evaluation runner for Indian Railways Passenger Help Desk."""
+"""Run many questions: python run_questions.py <questions.json> <results.json>
 
-import sys
+The questions file is a JSON list of {"id": ..., "question": ...}.
+The results file is a JSON list with one object per question: id, question
+and everything ask() returned (answer, sources, sql, dont_know).
+"""
+
 import json
+import sys
 import time
-import argparse
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from helpdesk.pipeline import ask
+
+PAUSE_SECONDS = 1
+
+
+def load_questions(path):
+    text = Path(path).read_text(encoding="utf-8-sig").strip()
+
+    if Path(path).suffix.lower() == ".json":
+        data = json.loads(text)
+        if isinstance(data, dict):
+            data = data.get("questions", [])
+        questions = []
+        for position, item in enumerate(data, start=1):
+            if isinstance(item, str):
+                questions.append({"id": f"Q{position}", "question": item})
+            else:
+                questions.append({
+                    "id": item.get("id", f"Q{position}"),
+                    "question": item["question"],
+                })
+        return questions
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return [{"id": f"Q{i}", "question": line} for i, line in enumerate(lines, start=1)]
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run batch evaluation over a JSON questions dataset."
-    )
-    parser.add_argument(
-        "input_file",
-        type=str,
-        help="Path to input JSON file containing questions.",
-    )
-    parser.add_argument(
-        "output_file",
-        type=str,
-        help="Path to output JSON file to save generated answers.",
-    )
-
-    args = parser.parse_args()
-
-    input_path = Path(args.input_file)
-    output_path = Path(args.output_file)
-
-    if not input_path.exists():
-        print(f"Error: Input file {input_path} does not exist.")
+    if len(sys.argv) != 3:
+        print("Usage: python run_questions.py <questions> <results>")
         sys.exit(1)
 
-    with open(input_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if not isinstance(data, list):
-        print("Error: Input JSON must be a list of question objects.")
-        sys.exit(1)
-
-    print(f"Loaded {len(data)} questions from {input_path}.")
+    questions = load_questions(sys.argv[1])
     results = []
 
-    for idx, item in enumerate(data, start=1):
-        q_id = item.get("id", f"Q{idx}")
-        question = item.get("question", "")
-        print(f"[{idx}/{len(data)}] Answering {q_id}: {question[:60]}...")
-
-        start_t = time.time()
+    for item in questions:
+        print(f"[{item['id']}] {item['question']}", flush=True)
         try:
-            res = ask(question)
-        except Exception as exc:
-            print(f"  Error processing {q_id}: {exc}")
-            res = {
-                "answer": f"Error: {exc}",
+            answer = ask(item["question"])
+        except Exception as error:  # ask() should never raise, but be safe
+            answer = {
+                "answer": f"Sorry, something went wrong: {type(error).__name__}",
                 "sources": [],
                 "sql": None,
                 "dont_know": True,
             }
-        elapsed = time.time() - start_t
-        print(f"  Done in {elapsed:.2f}s (dont_know: {res.get('dont_know')})")
+        results.append({"id": item["id"], "question": item["question"], **answer})
 
-        out_entry = {
-            "id": q_id,
-            "question": question,
-            "answer": res.get("answer", ""),
-            "sources": res.get("sources", []),
-            "sql": res.get("sql"),
-            "dont_know": res.get("dont_know", False),
-        }
-        results.append(out_entry)
+        # Save after every question so partial results survive a crash.
+        Path(sys.argv[2]).write_text(
+            json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        time.sleep(PAUSE_SECONDS)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
-
-    print(f"\nSaved {len(results)} results to {output_path}.")
+    print(f"Done: {len(results)} results written to {sys.argv[2]}")
 
 
 if __name__ == "__main__":
