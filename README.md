@@ -59,7 +59,7 @@ Every question goes through one function, `ask(question)` in `helpdesk/pipeline.
 
 ## ⚡ Install and run
 
-Run every command from the repository root. Python 3.10 or newer.
+Run every command from the repository root. Python 3.10 to 3.12 recommended.
 
 **1. Clone, create an environment and install**
 
