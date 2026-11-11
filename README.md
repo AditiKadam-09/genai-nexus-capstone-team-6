@@ -1,364 +1,344 @@
-# genai-nexus-capstone-team-6
+# 🚆 Railway Passenger Help Desk
 
-# 🚆 Indian Railways Passenger Help Desk AI
-### **GenAI Nexus Module 2 — Team 6 Capstone Project**
+### GenAI Nexus, Cohort 1, Module 2 Capstone: Team 6
 
 <div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-FF6F00?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Sentence Transformers](https://img.shields.io/badge/Embeddings-BGE--Small--v1.5-yellow?style=for-the-badge)](https://huggingface.co/BAAI/bge-small-en-v1.5)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Google Gemini](https://img.shields.io/badge/Gemini-3.5%20Flash--Lite-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-FF6F00?style=for-the-badge)](https://trychroma.com)
+[![Embeddings](https://img.shields.io/badge/Embeddings-BGE--Small--v1.5-yellow?style=for-the-badge)](https://huggingface.co/BAAI/bge-small-en-v1.5)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20(Read--Only)-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org)
-[![PyTest](https://img.shields.io/badge/Test%20Suite-Passing%20(31%2F31)-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/License-Academic%20Capstone-blueviolet?style=for-the-badge)](#)
 
 <p align="center">
-  <b>A Production-Grade Multi-Agent AI System delivering grounded, cited answers for Indian Railways passenger refund rules, ticketing policies, Tatkal circulars, and train timetable schedules.</b>
+  <b>A command-line help desk that answers Indian Railways passenger questions only from the data pack, with the document and page (or the SQL) behind every answer.</b>
 </p>
 
-[System Architecture](#-system-architecture) •
-[Team Contributions](#-team--module-ownership) •
-[Quickstart](#-quickstart--installation) •
-[CLI Usage](#-cli-usage--examples) •
-[Hybrid Retrieval Engine](#-hybrid-retrieval--reranking-engine) •
-[Evaluation & Benchmarks](#-evaluation--ablation-benchmarks) •
-[Safety Guardrails](#-safety-guardrails--data-contracts)
+[What it returns](#-what-it-returns) •
+[Install and run](#-install-and-run) •
+[Using it](#-using-it) •
+[How it works](#-how-it-works) •
+[Grounding](#-keeping-answers-grounded) •
+[Evaluation](#-evaluation) •
+[Tests](#-tests) •
+[Team](#-team)
 
 </div>
 
 ---
 
-## 📌 Executive Summary
+> An unofficial learning project built on public government documents and an open (CC0) timetable. Not affiliated with Indian Railways or IRCTC.
 
-The **Indian Railways Passenger Help Desk AI** is an enterprise-grade Question-Answering system designed to solve the challenges of navigating complex, evolving government railway policies and dense operational databases.
+## 📌 Summary
 
-The system combines:
-1. **Multi-Source Ingestion**: High-fidelity parsing of official gazettes, circulars, and HTML policies via Docling, PyMuPDF, and RapidOCR fallback.
-2. **Advanced 6-Mode Hybrid Retrieval Engine**: Dense bi-encoder semantic search (`BAAI/bge-small-en-v1.5`), domain-tokenized BM25Okapi, regex statutory code extraction (`Rule \d+`, `\b[0-2]\d{4}\b`), Reciprocal Rank Fusion ($k=60$), and Cross-Encoder reranking.
-3. **Safety-Constrained Text-to-SQL**: Natural language translation into read-only SQL queries against `rail_timetable.db` with query sandboxing.
-4. **Citation-Grounded LLM Generation**: Powered by Google Gemini (`gemini-3.5-flash-lite`) with strict zero-hallucination abstention and page-level source attribution.
-5. **Universal CLI Interface**: Dual-mode terminal output with formatted human-readable explanations and machine-parseable JSON contracts.
+The help desk answers questions from three kinds of data: refund and cancellation rules, Railway Board circulars, a PIB press release, and a 2016 timetable database. It says "I don't know" when the data cannot answer.
 
----
+- **Ingestion**: Docling, RapidOCR fallback and BeautifulSoup, with structure-aware chunking.
+- **Hybrid search**: six modes combining dense (`BAAI/bge-small-en-v1.5`), BM25, exact-code matching, Reciprocal Rank Fusion (k = 60) and a cross-encoder reranker.
+- **Grounded answers**: Gemini (`gemini-3.5-flash-lite`, temperature 0) sees only the retrieved passages, and sources are built by code, not typed by the model.
+- **Read-only text-to-SQL** for timetable questions, with layered safety checks.
+- **Router** that sends each question to documents, the database, both, or a clean "I don't know".
 
-## 🏗 System Architecture
+## 📤 What it returns
 
-The help desk pipeline dynamically analyzes passenger queries, identifies domain intent, routes execution across hybrid RAG and SQL engines, and generates verified answers with citations:
+Every question goes through one function, `ask(question)` in `helpdesk/pipeline.py`, which always returns:
 
-```mermaid
-flowchart TD
-    User(["Passenger Query"]) --> Router{"Intent Classifier: classify_intent()"}
-    
-    %% Intent Branching
-    Router -->|Policy or Rules| DocPath["Document Query"]
-    Router -->|Timetable or Schedule| SQLPath["Database Query"]
-    Router -->|Policy + Schedule| BothPath["Hybrid Multi-Hop"]
-    Router -->|Out of Domain| Abstain["Direct Abstention"]
-    
-    %% Document Path (Hybrid Retrieval)
-    subgraph DocRetrieval["Hybrid Retrieval Engine (helpdesk/search.py)"]
-        DocPath --> Preprocess["Railway Tokenizer & Synonym Expander"]
-        Preprocess --> Dense["ChromaDB Dense Search: bge-small-en-v1.5"]
-        Preprocess --> Lexical["BM25Okapi Keyword Search (Code Preserved)"]
-        Preprocess --> ExactCode["Statutory Rule & Train Regex Extractor"]
-        
-        Dense & Lexical --> RRF["Reciprocal Rank Fusion: k = 60"]
-        ExactCode -->|Exact Bonus: 0.05| RRF
-        RRF --> Reranker["CrossEncoder Reranker: ms-marco-MiniLM"]
-    end
-    
-    %% SQL Path
-    subgraph SQLPipeline["Text-to-SQL Engine (helpdesk/sql.py)"]
-        SQLPath --> SchemaPrompt["Schema-Grounded Prompting"]
-        SchemaPrompt --> GeminiSQL["Gemini SQL Generator"]
-        GeminiSQL --> Validator{"Safety Validation: Read-Only & AST Check"}
-        Validator -->|Safe SELECT| ExecDB[("SQLite Database: rail_timetable.db")]
-        Validator -->|Forbidden DDL/DML| SQLReject["Block Execution"]
-        ExecDB --> SQLSummary["SQL Result Synthesis"]
-    end
-    
-    %% Synthesis
-    Reranker --> LLMAnswer["Gemini Answer Synthesizer: answer_from_chunks()"]
-    SQLSummary --> LLMAnswer
-    BothPath --> DocRetrieval & SQLPipeline
-    
-    %% Output
-    LLMAnswer --> JSONContract["Strict Output JSON Contract"]
-    Abstain -->|dont_know: true| JSONContract
-    JSONContract --> Output(["CLI Terminal / JSON Output"])
+```json
+{
+  "answer": "the reply, in plain words",
+  "sources": [{"doc": "irctc_refund_rules_jan2026.pdf", "page": 2}],
+  "sql": "SELECT ... or null",
+  "dont_know": false
+}
 ```
 
----
+- `sources` lists the documents and pages the answer is based on. `page` is `null` for web pages.
+- `sql` holds the query for timetable answers, and is `null` otherwise.
+- `dont_know` is `true` when the system declines (no evidence, a request it must not fulfil, or a question the data cannot answer).
 
-## 👥 Team & Module Ownership
+## ⚡ Install and run
 
-| Member | Primary Role | Core Modules & Deliverables | Key Innovations |
-| :--- | :--- | :--- | :--- |
-| **Srujan** | **Senior Information Retrieval & RAG Architect** | `helpdesk/search.py`<br/>`eval/evaluate.py`<br/>`eval/benchmark_synthetic.py`<br/>`eval/experiments.md`<br/>`tests/test_search.py` | • 6-mode hybrid retrieval architecture<br/>• Railway-aware tokenizer + synonym expansion (S06 Clerkage fix)<br/>• Exact statutory rule/train code regex extractor with RRF boost ($\delta=0.05$)<br/>• Hit@5, MRR@5, Recall@5 evaluation harness (Hit@5: 1.000) |
-| **Bhargavi Sri Gurram** | **Document Ingestion & Indexing Engineer** | `helpdesk/ingestion/*`<br/>`helpdesk/ingest.py`<br/>`build_index.py`<br/>`tests/test_cleaner.py`<br/>`tests/test_chunker.py` | • Multi-source Docling + PyMuPDF + RapidOCR fallback<br/>• Contextual table footnote binding (intact refund matrices)<br/>• Contextual hierarchical chunking with document/section breadcrumbs<br/>• Persistent ChromaDB vector index (`rail_helpdesk_docs`) |
-| **Aditi Kadam** | **Text-to-SQL & Database Engineer** | `helpdesk/sql.py`<br/>`tests/test_railway_sql.py`<br/>`tests/test_sql_security.py` | • Zero-shot schema grounding for Indian Railway schedules<br/>• Enforced read-only SQLite safety URI (`?mode=ro`)<br/>• AST query sanitization blocking DDL/DML injections<br/>• Grounded SQL answer synthesis with table provenance |
-| **Devadarsan** | **LLM Answer Generation Engineer** | `helpdesk/answer.py`<br/>`helpdesk/llm.py`<br/>`tests/test_answer.py` | • Grounded system prompt with strict zero-hallucination guardrails<br/>• Page-level citation extraction and validation<br/>• Exponential backoff retry mechanism for API resilience<br/>• Clean abstention handling for unanswerable queries |
-| **Aida** *(Implemented with Srujan)* | **Query Orchestrator & CLI Engineer** | `helpdesk/pipeline.py`<br/>`ask.py`<br/>`run_questions.py`<br/>`tests/test_pipeline.py` | • Rule-based and semantic query intent router (`classify_intent`)<br/>• Interactive dual-mode CLI (`--json` & human-readable)<br/>• Batch evaluation runner with query latency benchmarks |
+Run every command from the repository root. Python 3.10 or newer.
 
----
+**1. Clone, create an environment and install**
 
-## ⚡ Quickstart & Installation
-
-### 1. Prerequisites
-- **Python 3.10+** (Tested on Python 3.12)
-- **Google Gemini API Key** ([Get an API Key](https://aistudio.google.com/app/apikey))
-
-### 2. Setup Environment
 ```bash
-# Clone the repository
 git clone https://github.com/AditiKadam-09/genai-nexus-capstone-team-6.git
 cd genai-nexus-capstone-team-6
 
-# Create and activate virtual environment
 python -m venv .venv
-
-# Windows:
-.\.venv\Scripts\Activate.ps1
-# Linux / macOS:
-source .venv/bin/activate
-
-# Install dependencies
+# Windows (PowerShell):  .\.venv\Scripts\Activate.ps1
+# Linux / macOS:         source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Environment Configuration
-Create a `.env` file in the project root:
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-LLM_MODEL=gemini-3.5-flash-lite
-CHROMA_PERSIST_DIR=index/chroma_db
-SQLITE_DB_PATH=data/database/rail_timetable.db
-```
+The install is large (PyTorch and Docling). The first run also downloads two small search models from Hugging Face (about 200 MB), so it needs internet.
 
-### 4. Build or Verify Index
+**2. Add the data pack**
+
+Unzip `rail_capstone_pack.zip` into a folder named `data/`, so the files end up in `data/rail_capstone_pack/...` (for example `data/rail_capstone_pack/database/rail_timetable.db`). The pack is not committed to this repository.
+
+**3. Add your Gemini key**
+
+Copy `.env.example` to `.env` and put your own key after `GEMINI_API_KEY=` ([get a key](https://aistudio.google.com/app/apikey)). The key stays in `.env` and is never committed. A free key allows about 15 requests per minute; when the limit is reached the client prints a message, waits, and retries automatically.
+
+**4. The search index**
+
+The index is already built and committed in `index/` (`chunks.json` and `chroma_db/`), so nothing needs to be built. To rebuild it from the pack (a few minutes on a CPU):
+
 ```bash
-# Ingest official circulars, gazettes, and policy HTML files
-python build_index.py --docs-dir documents --persist-dir index/chroma_db
+python build_index.py --reindex
 ```
 
----
+## 💻 Using it
 
-## 💻 CLI Usage & Examples
-
-The system features a single entry point: `ask.py`.
-
-### Human-Readable CLI Output (Default)
 ```bash
-python ask.py "How much clerkage is deducted for canceling a waitlisted sleeper ticket?"
+python ask.py                          # interactive: type a question, press Enter, type exit to quit
+python ask.py "your question"          # one question, readable answer
+python ask.py --json "your question"   # one question, raw JSON
+python run_questions.py <questions.json> <results.json>   # many questions
 ```
+
+`run_questions.py` reads a JSON list of `{"id": ..., "question": ...}` objects and writes a JSON list with one object per question: `id`, `question`, `answer`, `sources`, `sql`, `dont_know`. It saves after every question and pauses briefly between questions to respect the rate limit.
+
+### Examples (real output)
+
+A rules question:
+
 ```text
-======================================================================
-  INDIAN RAILWAYS PASSENGER HELP DESK
-======================================================================
-Question: How much clerkage is deducted for canceling a waitlisted sleeper ticket?
-Intent:   documents
-Sources:  indianrail_refund_rules_2015.html (p. null), irctc_refund_rules_jan2026.pdf (p. 17)
+$ python ask.py "If I cancel my confirmed Vande Bharat Sleeper ticket 10 hours before departure, how much do I lose?"
 
-Answer:
-----------------------------------------------------------------------
-A clerkage charge of ₹60 per passenger is deducted when a waitlisted (WL)
-or RAC sleeper class ticket is canceled within the prescribed time limit
-before the scheduled departure of the train.
-======================================================================
+ANSWER:
+... the cancellation charge shall be fifty per cent. of the fare. Therefore, you will lose 50% of the fare.
+
+SOURCES:
+  - rb_cc08_2026_vande_bharat_sleeper_refund.pdf (page 5)
+  - irctc_refund_rules_jan2026.pdf (page 2)
 ```
 
-### Strict Machine-Parseable JSON Output (`--json`)
-```bash
-python ask.py "What time does 12002 arrive at Bhopal?" --json
+A timetable question (the SQL is shortened here):
+
+```text
+Question> Where does the Bhopal Shatabdi (12002) stop between New Delhi and Bhopal, and where does it stop longest?
+
+ANSWER:
+Between New Delhi and Bhopal, the Bhopal Shatabdi (12002) stops at Mathura Jn (arrival 07:32, departure 07:34, halt 2 minutes), Agra Cantt (arrival 08:12, departure 08:17, halt 5 minutes), Morena (arrival 09:00, departure 09:02, halt 2 minutes), Gwalior Jn (arrival 09:35, departure 09:38, halt 3 minutes), and Jhansi Jn (arrival 10:48, departure 10:56, halt 8 minutes). It stops longest at Jhansi Jn, with a halt of 8 minutes.
+
+This answer is from the 2016 timetable in the data pack.
+
+SQL:
+SELECT st.name, s.arrival, s.departure, s.halt_min
+FROM stops a
+JOIN stops s ON ...
+ORDER BY s.stop_sequence
 ```
+
+A question the data cannot answer:
+
+```text
+Question> Which platform does the Mumbai Rajdhani leave from?
+
+ANSWER:
+I don't know. The timetable in my data does not contain that information.
+
+(dont_know: true - the system could not answer this from its data)
+```
+
+Raw JSON for a simple timetable lookup:
+
 ```json
 {
-  "answer": "Train 12002 (BHOPAL SHATABDI) arrives at Bhopal Junction (BPL) at 14:40.",
+  "answer": "The name of train 12430 is Delhi H Nizamuddin-Bangalore Rajdhani Express.  This answer is from the 2016 timetable in the data pack.",
   "sources": [],
-  "sql": "SELECT arr_time FROM timetable WHERE train_no = '12002' AND station_code = 'BPL';",
+  "sql": "SELECT name FROM trains WHERE number = '12430'",
   "dont_know": false
 }
 ```
 
-### Batch Evaluation Runner
-Run the official benchmark suite across all scenarios with live latency tracking:
+## 🏗 How it works
+
+```mermaid
+flowchart TD
+    Q["Passenger question"] --> R{"Router"}
+    R -->|"rules, refunds, circulars"| D["Documents path"]
+    R -->|"trains, stations, times"| T["Timetable path"]
+    R -->|"needs both"| B["Both paths"]
+    R -->|"fares, seats, predictions, unrelated"| N["I don't know"]
+    D --> S["Hybrid search"] --> G["Grounded answer"]
+    T --> L["Gemini writes one SELECT"] --> X["Read-only SQLite"] --> P["Rows to plain words"]
+    B --> D
+    B --> T
+    G --> O["answer, sources, sql, dont_know"]
+    P --> O
+    N --> O
+```
+
+### 1. Documents in (ingestion)
+
+- Docling reads the PDFs (headings, paragraphs, tables); pages without a text layer are read with RapidOCR. HTML pages are read with BeautifulSoup.
+- Each document has a date (from the pack's `SOURCES.md`), kept with every chunk so that the newer rule can win.
+- Chunks follow the document structure: sections split at headings and at page boundaries, so each chunk carries the page its text is really on. Tables are kept as Markdown with the header row repeated, footnotes stay with their table, and the sentence just before a table (its condition) is kept with it. Long text is cut at 1,500 characters with 150 characters of overlap; a single oversized table row is cut like ordinary text.
+- Every chunk stores `doc`, `page` (`null` for web pages), `date` and the section path, in `index/chunks.json` and in the ChromaDB collection `rail_helpdesk_docs`. Embeddings use `BAAI/bge-small-en-v1.5`.
+
+### 2. Search
+
+`helpdesk/search.py` supports six modes: `dense`, `bm25`, `dense_bm25`, `rrf`, `hybrid_exact` and `hybrid` (the default used by the pipeline).
+
+- **Dense** search over ChromaDB, **BM25** keyword search with a railway-aware tokenizer and a small synonym map (for example "deducted" and "clerkage"), and **exact-code matching** for things like "Rule 25" and five-digit train numbers.
+- The rankings are merged with Reciprocal Rank Fusion (k = 60), with a small bonus for exact-code matches, and the top candidates are reranked with the cross-encoder `ms-marco-MiniLM-L-6-v2`.
+
+### 3. Answers
+
+`helpdesk/answer.py` gives Gemini (`gemini-3.5-flash-lite`, temperature 0) the five best passages, each with its document, page and date, and a strict prompt:
+
+- answer only from the passages, never from general knowledge;
+- if two passages disagree, **the newer document wins**, and the answer says it overrides the older rule;
+- apply a rule only when its conditions (train type, class, time window) match the question;
+- if the passages do not contain the answer, say so.
+
+The model only cites chunk IDs. The code then builds `sources` (document and page) from the chunk metadata, so a document name or page number is never typed by the model.
+
+### 4. Timetable questions (text-to-SQL)
+
+`helpdesk/sql.py` reads the real schema from the database, adds generic query patterns (trains between two stations, journey time, halts) to the prompt, and asks Gemini for one SELECT query. Station names are matched exact-name-first with a LIKE fallback.
+
+- If the query fails, or returns no rows, the error is sent back to Gemini for up to two corrections.
+- The prompt has two special replies: `REFUSE` (a request to change or delete data) and `NO_DATA` (fares, seat availability, live status and similar). Both produce a polite answer with `dont_know: true`.
+- The returned rows, and nothing else, are turned into a plain-language answer. The SQL is returned in the `sql` field.
+
+**Safety layers** (any one of them can block a bad query):
+
+1. the database file is opened read-only (`mode=ro`);
+2. a SQLite authorizer allows reads of the timetable tables only, and blocks writes, `sqlite_master` and dangerous functions;
+3. only a single SELECT (or WITH) statement is accepted, and destructive keywords are rejected;
+4. a 5-second time limit and a 50-row cap.
+
+### 5. Routing
+
+`helpdesk/pipeline.py` decides where a question goes:
+
+- **Keywords first.** A train number or words like "timetable" and "station" send a question to the database; words like "refund", "cancel", "Tatkal" and "rule" send it to the documents. This costs no Gemini call.
+- **Gemini router for the rest.** If a question has both kinds of words, or neither, a Gemini call returns the route (`documents`, `database`, `both` or `none`). For a mixed question it also splits it into two standalone questions, one for each path. If Gemini is unavailable, the keywords decide.
+- **`none`** is used for what the data can never answer (fares, seat availability, live status, predictions such as whether a waitlisted ticket will be confirmed, and unrelated questions). This is decided from the question alone, without looking at any passages. A second safety net remains: the answer step also declines when the retrieved passages do not support the question.
+- For `both`, the two answers are merged. `ask()` never raises an error: any failure becomes an answer with `dont_know: true`.
+
+The router does not compute a numeric confidence score.
+
+## 🛡 Keeping answers grounded
+
+No system can promise zero mistakes, so these are the controls we use and test:
+
+- answers come only from retrieved passages or from SQL rows, and the prompts forbid adding facts;
+- sources are built by code from chunk metadata, never typed by the model;
+- the newer document wins when rules conflict;
+- the system declines (`dont_know: true`) when there is no evidence, for questions outside the data, and for requests to change data;
+- temperature 0, and a retry with growing waits for rate limits and temporary service errors;
+- we check the behaviour on unanswerable and harmful questions in `eval/test_set.json`.
+
+## 📊 Evaluation
+
+`eval/test_set.json` holds 28 labelled questions: the 10 sample questions from the pack, 13 questions checked against the documents or the database, and 5 timetable questions (including unanswerable and harmful ones). Document questions are labelled with the document and page that contain the answer.
+
+`eval/evaluate.py` measures Hit@5, MRR@5 and Recall@5 for each of the six search modes, plus end-to-end answer accuracy, source correctness and abstention accuracy on the first 10 questions. Full tables, the before/after comparison and the limits of this evaluation are in [`eval/experiments.md`](eval/experiments.md).
+
+In short:
+
+- Hit@5 is 1.0 for every search mode on this test set, so it cannot rank them. MRR@5 lies between about 0.82 and 0.93 depending on the mode, and the cross-encoder reranker did not improve it.
+- Raising the chunk size from 500 to 1,500 characters raised the average Recall@5 over the six modes from about 0.91 to 0.98. The end-to-end figures were 1.0 in both runs on the first 10 questions, so the change was justified by answer failures we found by hand: with 500-character chunks a Vande Bharat rule was cut into three fragments and two of the ten sample questions were answered wrongly.
+- These figures come from a small test set and are not a general accuracy claim.
+
+To run the evaluation (it uses Gemini for the end-to-end part, and writes a report; give it your own output path so that it does not overwrite `eval/experiments.md`):
+
 ```bash
-python run_questions.py --questions questions/sample_questions.json --output results.json
+python eval/evaluate.py --output-md eval/my_run.md
 ```
 
----
+## 🧪 Tests
 
-## 🔍 Hybrid Retrieval & Reranking Engine
+```bash
+python -m pytest tests/test_answer.py tests/test_chunker.py tests/test_cleaner.py -q
 
-Implemented in `helpdesk/search.py`, the retrieval engine is engineered specifically for Indian Railways statutory documents.
-
-### The 6 Retrieval Configurations
-1. **`dense`**: Bi-encoder vector search using `BAAI/bge-small-en-v1.5` over ChromaDB with $L_2$-normalized cosine similarity.
-2. **`bm25`**: Lexical retrieval via `rank_bm25` (BM25Okapi) preserving railway identifiers (`TC-II/2015`, `RAC/WL`, `12002`).
-3. **`dense_bm25`**: MinMax-normalized weighted linear combination of dense and lexical scores.
-4. **`rrf`**: Reciprocal Rank Fusion ($k=60$) providing scale-invariant rank merging.
-5. **`hybrid_exact`**: RRF combined with statutory regex exact-code boosts ($\delta=0.05$).
-6. **`hybrid`**: Full pipeline — RRF rank fusion, exact-code boost, and `ms-marco-MiniLM-L-6-v2` Cross-Encoder reranking.
-
-### Solving Domain Challenges: The S06 Case Study
-**Problem**: When passengers ask: *"How much is deducted when I cancel a waitlisted sleeper class ticket?"*, standard dense and lexical retrieval failed because:
-- Passengers use everyday words: `"deducted"`, `"cancel"`, `"waitlisted"`.
-- Official Gazette rules use legal terminology: `"clerkage"`, `"RAC/WL"`, `"Second Class (Reserved)"`.
-
-**Architectural Solution**:
-- **Domain Synonym Expansion**: Added a bidirectional railway mapping in `helpdesk/search.py`:
-  ```python
-  RAILWAY_SYNONYMS = {
-      "deducted": ["clerkage", "cancellation charge", "refund"],
-      "waitlisted": ["wl", "rac", "waitlist", "rac/wl", "clerkage"],
-      "sleeper": ["second class", "2s", "sl", "sleeper class"],
-  }
-  ```
-- **Compound Code Extraction**: Enhanced regex pattern recognition to capture compound cancellation clauses.
-- **Outcome**: `refund_rules_2015_0001` (Rule 7 Clerkage Table) immediately ranked **#1** with 100% precision.
-
----
-
-## 📊 Evaluation & Ablation Benchmarks
-
-Empirical ablation testing was conducted on a controlled 10-query statutory corpus using live transformer bi-encoders and cross-encoders (`eval/benchmark_synthetic.py` & `eval/experiments.md`):
-
-| Retrieval Mode | Hit@5 | MRR@5 | Recall@5 | Latency (CPU) | Primary Strengths & Findings |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **BM25 Only** | 1.0000 | 0.9500 | 1.0000 | **~2 ms** | High recall on rare statutory tokens & abbreviations. |
-| **Dense Only** | 1.0000 | 1.0000 | 1.0000 | ~15 ms | Strong semantic generalizability across paraphrases. |
-| **Dense + BM25 Linear** | 1.0000 | 0.9500 | 1.0000 | ~17 ms | Combines strengths; sensitive to raw score scaling. |
-| **Dense + BM25 + RRF ($k=60$)** | **1.0000** | **1.0000** | **1.0000** | ~17 ms | Scale-invariant rank fusion; eliminates arbitrary weights. |
-| **Hybrid + Exact-Code Match** | **1.0000** | **1.0000** | **1.0000** | ~18 ms | **Best Overall**: Elevates Rule numbers & train IDs to Rank 1. |
-| **Hybrid + Cross-Encoder** | 1.0000 | 0.9500 | 1.0000 | ~55 ms | Cross-attention reranking; exhibits general MS-MARCO bias. |
-
-> **Key Finding**: **Hybrid + Exact-Code Match with RRF** delivers the highest accuracy and lowest latency without the CPU cross-attention penalty.
-
----
-
-## 🛡 Safety Guardrails & Data Contracts
-
-### 1. Strict Output Contract
-Every response from the pipeline adheres to the following contract schema:
-```json
-{
-  "answer": "Plain-language synthesized response grounded strictly in context",
-  "sources": [
-    {
-      "doc": "official_document_name.pdf",
-      "page": 4
-    }
-  ],
-  "sql": "SELECT ... FROM ... WHERE ... (or null)",
-  "dont_know": false
-}
+# Text-to-SQL tests (run as modules; they need the pack unzipped into data/)
+python -m tests.test_answer_sql
+python -m tests.test_sql_security
+python -m tests.test_sql_edge_cases
+python -m tests.test_sql_prompt
+python -m tests.test_sql_module
+python -m tests.test_sql_mock
+python -m tests.test_railway_sql
 ```
 
-### 2. SQL Query Sandboxing
-- **Read-Only Enforced**: Database connection strictly opens with `file:rail_timetable.db?mode=ro`.
-- **AST Parser Validation**: Blocks destructive keywords (`DROP`, `DELETE`, `UPDATE`, `INSERT`, `ALTER`, `ATTACH`).
-- **Timeout Protection**: Queries timeout after 5 seconds to prevent runaway joins.
+The tests for search, extraction, indexing and ingestion (`tests/test_search.py`, `test_extraction.py`, `test_indexer.py`, `test_ingest.py`) need the full requirements installed and the index present. The SQL tests use fake model replies, so they need no key.
 
-### 3. Hallucination Prevention
-- When documents or database rows lack evidence, the engine sets `"dont_know": true` and abstains cleanly rather than hallucinating facts or phantom citations.
-
----
-
-## 📂 Repository Directory Tree
+## 📂 Repository layout
 
 ```text
-genai-nexus-capstone-team-6/
-├── ask.py                       # CLI entry point (interactive & JSON mode)
-├── build_index.py               # Vector database index builder CLI
-├── run_questions.py             # Batch evaluation benchmark runner
-├── requirements.txt             # Locked project dependencies
-├── README.md                    # Project documentation & architectural manual
-│
-├── helpdesk/                    # Core system package
-│   ├── __init__.py
-│   ├── pipeline.py              # Query router & multi-agent orchestrator
-│   ├── search.py                # 6-mode Hybrid Retrieval & Reranker engine
-│   ├── sql.py                   # Text-to-SQL engine with read-only sandbox
-│   ├── answer.py                # LLM answer synthesis & citation extraction
-│   ├── llm.py                   # Google Gemini API client with backoff
-│   ├── ingest.py                # Ingestion API entry point
-│   └── ingestion/               # Document processing subpackage
-│       ├── pdf_extractor.py     # Docling & RapidOCR PDF parsing
-│       ├── html_extractor.py    # BeautifulSoup HTML policy parsing
-│       ├── cleaner.py           # Text normalizer & footnote binding
-│       ├── chunker.py           # Contextual table & section chunking
-│       ├── embedder.py          # BAAI/bge-small-en-v1.5 dense embedder
-│       └── indexer.py           # Persistent ChromaDB vector indexer
-│
-├── eval/                        # Evaluation & ablation suite
-│   ├── evaluate.py              # Retrieval & system metric evaluator
-│   ├── benchmark_synthetic.py   # Controlled synthetic benchmark runner
-│   ├── experiments.md           # Formal empirical ablation report
-│   └── test_set.json            # 20 ground-truth evaluation queries
-│
-├── database/                    # Relational database assets
-│   ├── rail_timetable.db        # SQLite Indian Railways timetable database
-│   └── schema.md                # Timetable database schema definition
-│
-├── documents/                   # Official regulatory documents & gazettes
-│   ├── irctc_refund_rules_jan2026.pdf
-│   ├── indianrail_refund_rules_2015.html
-│   ├── rb_cc08_2026_vande_bharat_sleeper_refund.pdf
-│   ├── rb_cc10_2024_advance_reservation.pdf
-│   ├── rb_cc08_2025_tatkal.pdf
-│   ├── rb_cc10_2025_reservation_charts.pdf
-│   └── pib_2026-03-24_reform_express.html
-│
-├── index/                       # Pre-built persistent index artifacts
-│   ├── chroma_db/               # Persistent ChromaDB vectors (rail_helpdesk_docs)
-│   └── chunks.json              # 270 chunk metadata & text dictionary
-│
-└── tests/                       # Automated regression test suite
-    ├── test_search.py           # 18 hybrid retrieval & RRF tests
-    ├── test_answer.py           # 5 Gemini answer & citation tests
-    ├── test_railway_sql.py      # SQL generation & execution tests
-    ├── test_cleaner.py          # Footnote binding & normalization tests
-    ├── test_chunker.py          # Table-aware chunking tests
-    ├── test_extraction.py       # PDF/HTML parser tests
-    └── test_indexer.py          # ChromaDB indexing tests
+ask.py                  CLI: interactive mode, one question, or --json
+run_questions.py        batch runner used for the hidden questions
+build_index.py          builds the search index (optional, the index is committed)
+requirements.txt        pinned dependencies
+.env.example            GEMINI_API_KEY= and settings (copy to .env)
+
+helpdesk/
+  pipeline.py           ask(): routing and merging
+  search.py             six search modes, tokenizer, exact codes, reranker
+  answer.py             grounded answers from passages
+  sql.py                read-only text-to-SQL
+  llm.py                Gemini client with wait-and-retry
+  ingest.py             ingestion entry point
+  ingestion/            pipeline that turns the pack into chunks and an index
+ingestion/              extractors, cleaner, chunker, embedder, indexer and settings
+                        (imported by helpdesk/ingestion/pipeline.py)
+
+index/
+  chunks.json           all chunks with document, page, date and section
+  chroma_db/            ChromaDB vector index (collection rail_helpdesk_docs)
+
+eval/
+  test_set.json         28 labelled questions
+  evaluate.py           retrieval and end-to-end evaluation
+  experiments.md        results and before/after comparison
+  benchmark_synthetic.py  small synthetic smoke benchmark (not used for the reported results)
+
+tests/                  unit tests (see "Tests")
 ```
 
----
+## 👥 Team
 
-## 🧪 Running the Test Suite
+| Member | Primary role | Contribution |
+| :--- | :--- | :--- |
+| **Bhargavi Sri Gurram** | Document Ingestion & Indexing Engineer | Docling and RapidOCR extraction, cleaning, footnote binding, chunking, embeddings, ChromaDB index (`helpdesk/ingestion/`, `ingestion/`, `build_index.py`). |
+| **Srujan** | Information Retrieval & Evaluation | The six search modes, tokenizer and synonyms, exact-code matching, reranker, and the evaluation harness (`helpdesk/search.py`, `eval/evaluate.py`). |
+| **Devadarsan** | LLM Answer Generation Engineer | Gemini client with retries, the grounded answer prompt, abstention (`helpdesk/llm.py`, `helpdesk/answer.py`). |
+| **Aditi Kadam** | Text-to-SQL, Pipeline & CLI | Read-only text-to-SQL and its tests (`helpdesk/sql.py`); the final pipeline, CLI and batch runner (`helpdesk/pipeline.py`, `ask.py`, `run_questions.py`); chunking fixes (page-accurate sections, table lead-in sentences, dates); the 28-question test set. |
+| **Aida** *(with Srujan)* | Query Orchestrator & CLI Engineer | Query routing and the command-line interface, including the interactive mode, the `--json` and readable output modes, and the batch runner (`helpdesk/pipeline.py`, `ask.py`, `run_questions.py`). |
 
-Execute the full workspace regression test suite:
-```bash
-# Run all automated tests
-pytest tests/ -v
+## ⚠️ Known limitations
 
-# Run retrieval tests only
-pytest tests/test_search.py -v
+- The timetable is a **2016 snapshot**. It has no platform numbers, fares or seat availability, and it contains no newer trains.
+- There is no numeric routing confidence; routing uses keywords and a Gemini router (see "Routing").
+- The test set is small (28 questions) and Hit@5 is saturated, so it separates the search modes poorly. End-to-end metrics cover only the first 10 questions.
+- Text extracted from some PDFs loses the space at a line break (for example "betweenseventy-two"); the numbers are not affected.
+- The free Gemini key allows about 15 requests per minute, so a long run can pause while it waits and retries.
 
-# Run SQL safety and execution tests
-pytest tests/test_railway_sql.py tests/test_sql_security.py -v
+## 📜 Data sources
 
-# Run answer generation tests
-pytest tests/test_answer.py -v
-```
+All documents are in the course data pack (`SOURCES.md` there lists the originals):
 
----
-
-## 📜 Official Document Sources & Regulatory References
-
-1. **IRCTC Refund Rules 2026**: `irctc_refund_rules_jan2026.pdf` — Gazette notification on cancellation fees, TDR filing periods, and RAC/WL clerkage charges.
-2. **Indian Railways (Filing of Claims) Rules 2015**: `indianrail_refund_rules_2015.html` — Gazette notification defining statutory rule numbers (Rule 7, Rule 25, etc.).
-3. **Vande Bharat Sleeper Refund Circular (2026)**: `rb_cc08_2026_vande_bharat_sleeper_refund.pdf` — Railway Board Commercial Circular 08/2026.
-4. **Advance Reservation Period Revision (2024)**: `rb_cc10_2024_advance_reservation.pdf` — Railway Board Commercial Circular 10/2024 (60-day ARP limit).
-5. **Tatkal Concession & Reservation (2025)**: `rb_cc08_2025_tatkal.pdf` — Railway Board Commercial Circular 08/2025.
-6. **Chart Preparation Rules (2025)**: `rb_cc10_2025_reservation_charts.pdf` — Railway Board Commercial Circular 10/2025.
-7. **PIB Press Release**: `pib_2026-03-24_reform_express.html` — Ministry of Railways modernization updates.
+| File | What it is | Date used |
+| :--- | :--- | :--- |
+| `irctc_refund_rules_jan2026.pdf` | IRCTC refund rules and TDR filing | 2026-01-19 |
+| `indianrail_refund_rules_2015.html` | Refund rules page with the pre-revised and revised (12 Nov 2015) tables | 2015-11-12 |
+| `rb_cc08_2026_vande_bharat_sleeper_refund.pdf` | Railway Board Commercial Circular 08/2026 (gazette notification for Vande Bharat Sleeper refunds) | 2026-01-16 |
+| `rb_cc10_2024_advance_reservation.pdf` | Railway Board Commercial Circular 10/2024 (advance reservation period) | 2024-10-16 |
+| `rb_cc08_2025_tatkal.pdf` | Railway Board Commercial Circular 08/2025 (Tatkal booking and Aadhaar authentication) | 2025-06-10 |
+| `rb_cc10_2025_reservation_charts.pdf` | Railway Board Commercial Circular 10/2025 (reservation charts) | 2025-07-02 |
+| `pib_2026-03-24_reform_express.html` | PIB press release, "Reform Express" | 2026-03-24 |
+| `rail_timetable.db` | SQLite timetable (2016 snapshot, open CC0 data) | n/a |
 
 ---
 
 <div align="center">
-  <b>Developed for GenAI Nexus Module 2 Capstone • Team 6</b><br/>
-  <i>Engineered with rigorous testing, grounded citations, and safety-first multi-agent orchestration.</i>
+  <b>Developed for GenAI Nexus Module 2 Capstone • Team 6</b>
 </div>
-
