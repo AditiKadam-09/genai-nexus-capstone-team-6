@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Any, List, Dict, Optional
 
 from helpdesk.llm import generate
 
-#import time
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are the Railway Passenger Help Desk assistant.
 
@@ -78,10 +79,10 @@ def format_context(results: list[dict[str, Any]], max_chars: int = 20000) -> str
     for index, result in enumerate(results, start=1):
         metadata = result.get("metadata") or {}
         chunk_id = str(result.get("chunk_id") or f"unknown_{index}")
-        page = metadata.get("page", "unknown")
-        doc = metadata.get("doc", "unknown document")
-        section = metadata.get("section_path", "")
-        date = metadata.get("date", "")
+        page = metadata.get("page", result.get("page", "unknown"))
+        doc = metadata.get("doc", result.get("doc", "unknown document"))
+        section = metadata.get("section_path", result.get("section_path", ""))
+        date = metadata.get("date", result.get("date", ""))
 
         header = (
             f"[Source {index}] chunk_id: {chunk_id} | document: {doc} "
@@ -104,7 +105,7 @@ def _source_labels(results: list[dict[str, Any]]) -> list[str]:
     for result in results:
         metadata = result.get("metadata") or {}
         chunk_id = str(result.get("chunk_id") or "unknown")
-        page = metadata.get("page", "unknown")
+        page = metadata.get("page", result.get("page", "unknown"))
         label = f"{chunk_id} (page {page})"
         if label not in seen:
             sources.append(label)
@@ -169,11 +170,6 @@ def generate_answer(
     generator = llm_fn or generate
 
     answer = generator(messages)
-    # start_time = time.perf_counter()
-    # answer = generator(messages)
-    # elapsed = time.perf_counter() - start_time
-    # print(f"Gemini response time: {elapsed:.2f} seconds")
-
 
     if not isinstance(answer, str) or not answer.strip():
         raise RuntimeError("The language model returned an empty answer.")
@@ -200,6 +196,68 @@ def generate_answer(
         "context": context,
         "status": status,
     }
+
+
+def answer_from_chunks(
+    question: str,
+    chunks: List[Dict[str, Any]],
+    llm=None,
+) -> Dict[str, Any]:
+    """Contract-compatible answer function for pipeline.py.
+
+    Returns:
+        {
+            "answer": "Plain-language response",
+            "sources": [{"doc": "filename.pdf", "page": 3}],
+            "sql": None,
+            "dont_know": False
+        }
+    """
+    if not chunks:
+        return {
+            "answer": "I don't know. The supplied railway documents do not contain evidence to answer this question.",
+            "sources": [],
+            "sql": None,
+            "dont_know": True,
+        }
+
+    # Extract distinct document/page sources for contract format
+    sources = []
+    seen = set()
+    for c in chunks:
+        meta = c.get("metadata", {})
+        doc = meta.get("doc") or c.get("doc")
+        page = meta.get("page") if "page" in meta else c.get("page")
+        if doc:
+            key = (doc, page)
+            if key not in seen:
+                seen.add(key)
+                sources.append({"doc": doc, "page": page})
+
+    try:
+        gen_res = generate_answer(
+            question=question,
+            retrieved_chunks=chunks,
+            llm_fn=llm,
+        )
+        answer_text = gen_res["answer"]
+        dont_know = gen_res["status"] == "insufficient_evidence"
+
+        return {
+            "answer": answer_text,
+            "sources": sources,
+            "sql": None,
+            "dont_know": dont_know,
+        }
+    except Exception as exc:
+        logger.error("Answer generation failed: %s", exc)
+        return {
+            "answer": "I could not generate an answer due to an internal error.",
+            "sources": sources,
+            "sql": None,
+            "dont_know": True,
+        }
+
 
 def answer_question(question: str, top_k: int = 5, filters: dict | None = None):
     """Compatibility wrapper; filters are reserved for future search support."""
