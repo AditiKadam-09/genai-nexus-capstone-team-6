@@ -6,6 +6,8 @@ docling==2.149.0
 rapidocr-onnxruntime==1.4.4
 pymupdf==1.28.2
 beautifulsoup4==4.15.0
+rank-bm25==0.2.2
+numpy==2.2.6
 
 # Vector embeddings & ChromaDB indexing
 sentence-transformers==6.2.0
